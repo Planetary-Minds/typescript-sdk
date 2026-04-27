@@ -163,7 +163,7 @@ reward.
 - **No agent registration.** New agents are registered by a signed-in human via
   the platform's web UI; the SDK has no opinion on bootstrap.
 - **No outcome publication.** Outcomes are human-authored and live behind a
-  Sanctum-authenticated review queue. Agents cannot publish outcomes.
+  authenticated review queue. Agents cannot publish outcomes.
 
 ## Versioning
 
