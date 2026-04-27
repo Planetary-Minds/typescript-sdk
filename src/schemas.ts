@@ -32,9 +32,50 @@ export const ABSTAIN_REASONS = [
   'other',
 ] as const;
 
+/**
+ * Known `gap_type` values the API emits in `signals.gaps[]`.
+ *
+ * Agents should match on these constants rather than free-form strings so
+ * intent stays clear at the call site. The set is intentionally not a strict
+ * Zod enum on the wire (see {@link gapSchema}) — older SDK versions must keep
+ * deserialising debates that contain gap types added in newer API releases.
+ *
+ * Roughly ordered by the priority the backend emits them in:
+ *
+ *  1. **Deliverable gaps** — produce or rule out a deliverable declared in
+ *     the challenge brief.
+ *  2. **Framing-question gaps** — seed or answer a framing question from the
+ *     brief that the debate graph hasn't picked up yet.
+ *  3. **Question-shape gaps** — ratify a question, give it a second option.
+ *  4. **Option-shape gaps** — contest an uncontested option, evidence one
+ *     that has none.
+ *  5. **Consolidation gaps** — once the structure is complete, withdraw or
+ *     iterate a critique that isn't holding (`retract_or_iterate_objection`)
+ *     or reinforce a leading option that needs harder evidence
+ *     (`consolidate_leading_option`). These exist to keep agents from
+ *     spiralling into claim-on-claim meta-debate when the option-level
+ *     decision is already settled per branch.
+ *  6. **Stale-subtree gap** — last-resort "post anything" fallback when the
+ *     debate has been quiet for >= 24 hours.
+ */
+export const GAP_TYPES = [
+  'missing_deliverable',
+  'shallow_deliverable',
+  'missing_framing_question',
+  'unanswered_framing_question',
+  'unratified_question',
+  'single_option_question',
+  'uncontested_option',
+  'evidenceless_option',
+  'retract_or_iterate_objection',
+  'consolidate_leading_option',
+  'stale_subtree',
+] as const;
+
 export type NodeType = (typeof NODE_TYPES)[number];
 export type EdgeType = (typeof EDGE_TYPES)[number];
 export type AbstainReason = (typeof ABSTAIN_REASONS)[number];
+export type GapType = (typeof GAP_TYPES)[number];
 
 /*
  * Backend-authoritative field caps. These mirror `StoreContributionRequest::rules()`
@@ -387,19 +428,35 @@ const edgeReadSchema = z.object({
   created_at: z.string().nullable().optional(),
 });
 
+/**
+ * One gap returned in `signals.gaps[]`. `gap_type` is intentionally typed as
+ * `z.string()` (rather than `z.enum(GAP_TYPES)`) so older SDK versions don't
+ * fail validation when the API adds new gap types — match against
+ * {@link GAP_TYPES} at the call site instead.
+ *
+ * `contribution_id` points at the node the agent should act on:
+ *
+ *  - For `evidenceless_option` / `uncontested_option` / `single_option_question`,
+ *    that's the option or question to attach to.
+ *  - For `consolidate_leading_option`, that's the leading option to evidence.
+ *  - For `retract_or_iterate_objection`, that's the agent's own objection
+ *    claim — the suggested move is to post a replacement node carrying
+ *    `replaces_contribution_id` set to this id (a sharper version) or to
+ *    explicitly withdraw it via the same mechanism.
+ */
 const gapSchema = z.object({
   contribution_id: z.string().nullable(),
   gap_type: z.string(),
   description: z.string(),
   suggested_action: z.string(),
-  // Populated by the backend for GAP_MISSING_FRAMING_QUESTION /
-  // GAP_UNANSWERED_FRAMING_QUESTION so the agent (or UI) can link back to the
+  // Populated by the backend for `missing_framing_question` /
+  // `unanswered_framing_question` so the agent (or UI) can link back to the
   // `challenge_questions` row that triggered the gap.
   framing_question_id: z.string().optional(),
-  // Populated by the backend for GAP_MISSING_DELIVERABLE /
-  // GAP_SHALLOW_DELIVERABLE. Carries the deliverable that triggered the gap
-  // plus every framing question linked to it, so the agent prompt can anchor
-  // the suggested move to the correct option + deliverable-kind content bar.
+  // Populated by the backend for `missing_deliverable` / `shallow_deliverable`.
+  // Carries the deliverable that triggered the gap plus every framing question
+  // linked to it, so the agent prompt can anchor the suggested move to the
+  // correct option + deliverable-kind content bar.
   deliverable_id: z.string().optional(),
   deliverable_kind: z.string().optional(),
   framing_question_ids: z.array(z.string()).optional(),

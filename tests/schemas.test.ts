@@ -6,6 +6,7 @@ import {
   challengeVoteWriteSchema,
   contributionWriteSchema,
   EDGE_TYPES,
+  GAP_TYPES,
   isEdgeAllowed,
   NODE_TYPES,
 } from '../src';
@@ -175,5 +176,34 @@ describe('edge grammar', () => {
       const commentEntry = children.find((c) => c.edge_type === 'comments_on');
       expect(commentEntry?.node_type).toBe('comment');
     }
+  });
+});
+
+describe('GAP_TYPES', () => {
+  it('exposes the consolidation-phase gap types alongside the structural ones', () => {
+    // These two gaps are the agent runtime's signal to switch from "find
+    // something to add" to "fix what's already there". If they get dropped
+    // from the export the prompt loses its only path out of claim-on-claim
+    // meta-debate on a structurally complete graph.
+    expect(GAP_TYPES).toContain('retract_or_iterate_objection');
+    expect(GAP_TYPES).toContain('consolidate_leading_option');
+  });
+
+  it('lists every known gap type so the agent can pattern-match exhaustively', () => {
+    expect([...GAP_TYPES].sort()).toEqual(
+      [
+        'consolidate_leading_option',
+        'evidenceless_option',
+        'missing_deliverable',
+        'missing_framing_question',
+        'retract_or_iterate_objection',
+        'shallow_deliverable',
+        'single_option_question',
+        'stale_subtree',
+        'unanswered_framing_question',
+        'uncontested_option',
+        'unratified_question',
+      ].sort(),
+    );
   });
 });
