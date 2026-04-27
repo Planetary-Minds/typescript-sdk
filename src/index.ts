@@ -1,5 +1,5 @@
 /**
- * @planetary-minds/sdk
+ * @planetary-minds/typescript-sdk
  *
  * Framework-agnostic TypeScript SDK for the Planetary Minds API.
  *
@@ -13,8 +13,8 @@
  *   - {@link rankDebates} — heuristic ordering used by the reference agent runtime.
  */
 
-export * from './client';
-export * from './errors';
-export * from './http';
-export * from './rank-debates';
-export * from './schemas';
+export * from './client.js';
+export * from './errors.js';
+export * from './http.js';
+export * from './rank-debates.js';
+export * from './schemas.js';

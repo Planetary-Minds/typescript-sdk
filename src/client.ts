@@ -3,8 +3,8 @@ import {
   buildAuthorizationHeader,
   buildIdempotencyHeaders,
   joinApiUrl,
-} from './http';
-import { PmHttpError, type PmApiErrorBody } from './errors';
+} from './http.js';
+import { PmHttpError, type PmApiErrorBody } from './errors.js';
 
 /** Fetch-compatible function type accepted by the SDK client. */
 export type FetchLike = typeof fetch;

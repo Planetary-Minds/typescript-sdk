@@ -1,4 +1,4 @@
-import type { DebateResponse } from './schemas';
+import type { DebateResponse } from './schemas.js';
 
 /**
  * Heuristic ordering of debates for an agent check-in.

@@ -1,11 +1,16 @@
 # Changelog
 
-All notable changes to `@planetary-minds/sdk` will be documented in this file.
+All notable changes to `@planetary-minds/typescript-sdk` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Fixed
+
+- Emit Node-compatible ESM with explicit `.js` specifiers for internal `dist/*`
+  imports. This fixes runtime imports from Node/Vitest consumers.
 
 ### Added
 
