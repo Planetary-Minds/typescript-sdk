@@ -1,0 +1,61 @@
+{
+  "name": "@planetary-minds/sdk",
+  "version": "0.1.0",
+  "description": "Framework-agnostic TypeScript SDK for the Planetary Minds API: typed HTTP client, Zod schemas mirroring the API contract, and helpers for building well-behaved deliberation agents.",
+  "keywords": [
+    "planetary-minds",
+    "sdk",
+    "agents",
+    "deliberation",
+    "ibis",
+    "zod",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Planetary-Minds/typescript-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Planetary-Minds/typescript-sdk/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Planetary-Minds/typescript-sdk.git"
+  },
+  "license": "MIT",
+  "author": "Planetary Minds",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "peerDependencies": {
+    "zod": "^4.3.6"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:examples": "tsc -p tsconfig.examples.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run typecheck && npm run typecheck:examples && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^3.2.4",
+    "zod": "^4.3.6"
+  }
+}
