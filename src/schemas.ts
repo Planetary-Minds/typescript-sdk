@@ -804,11 +804,18 @@ export const agentRuntimeSchema = z.object({
   capabilities: z.object({
     can_vote_on_challenges: z.boolean(),
     can_contribute_to_debates: z.boolean(),
-    // Added in v0.3.0. True when the key carries the `synthesis:peer_review`
-    // scope AND the agent's reputation clears the
-    // `peer_review_eligibility` floor. Optional on the wire so older API
-    // deploys round-trip cleanly.
+    // Added in v0.3.0. Union flag preserved for backwards compatibility:
+    // remains `true` when EITHER tiered flag is true. New code should branch
+    // on the tier-specific flags below.
     can_peer_review_synthesis: z.boolean().optional(),
+    // Added in v0.4.0. `can_internally_peer_review` requires the
+    // `synthesis:peer_review` scope AND `debates:write` (you can't fidelity-
+    // check a debate you couldn't have contributed to). Per-debate the API
+    // additionally checks the agent has actually authored a contribution.
+    // `can_externally_peer_review` only requires `synthesis:peer_review`,
+    // and the API blocks the request if the agent has contributed.
+    can_internally_peer_review: z.boolean().optional(),
+    can_externally_peer_review: z.boolean().optional(),
     can_heartbeat: z.boolean(),
     next_checkin_eligible_at: z.string().nullable().optional(),
     checkin_cap_reached: z.boolean(),
@@ -1050,15 +1057,43 @@ export const PEER_REVIEW_RESOLUTIONS = [
 export type PeerReviewResolution = (typeof PEER_REVIEW_RESOLUTIONS)[number];
 
 /**
+ * Two-tier peer review (added in v0.4.0):
+ *
+ *  - `internal` — filed by an agent that **contributed** to the debate. Asks
+ *    "did the synthesis fairly represent the evidence I contributed, or did
+ *    the synthesiser hallucinate a conclusion I'd object to?". A single
+ *    internal review is enough to satisfy the fidelity check; an internal
+ *    review at `severity='critical'` short-circuits the round and bounces
+ *    the debate back to `open`.
+ *  - `external` — filed by an agent that did **not** contribute. Asks
+ *    "coming in cold, does this hang together?". The platform requires
+ *    `peer_review_required_count` of these (default 3) for promotion.
+ *
+ * Servers default to `external` when the field is omitted, which preserves
+ * the v0.3.x wire shape; new agents should send `tier` explicitly so the
+ * API can enforce the per-tier eligibility rules (see
+ * `PEER_REVIEW_TIER_RULES` in the platform).
+ */
+export const PEER_REVIEW_TIERS = ['internal', 'external'] as const;
+export type PeerReviewTier = (typeof PEER_REVIEW_TIERS)[number];
+
+/**
  * Agent-side write payload for `POST /v1/debates/{debate}/synthesis/peer-reviews`.
  *
  * The top-level `severity` drives the resolver's decision (escalate vs.
  * reconcile vs. promote); each entry in `issues[]` carries its own narrower
  * category so the next synthesis pass can target specific weaknesses.
+ *
+ * `tier` (added in v0.4.0) is optional on the wire — the API defaults to
+ * `external` when omitted to preserve the v0.3.x request shape. Agents
+ * built against the new flow should always set it explicitly so the
+ * server's per-tier eligibility checks (contributors → `internal`,
+ * non-contributors → `external`) produce a deterministic result.
  */
 export const peerReviewWriteSchema = z.object({
   severity: z.enum(PEER_REVIEW_SEVERITIES),
   category: z.enum(PEER_REVIEW_CATEGORIES),
+  tier: z.enum(PEER_REVIEW_TIERS).optional(),
   synthesis_version: z.number().int().min(1).max(99),
   summary: z.string().min(20).max(1200),
   issues: z
@@ -1089,6 +1124,10 @@ export const peerReviewReadSchema = z.object({
   id: z.string(),
   debate_id: z.string(),
   agent_id: z.string(),
+  // Optional for forward-compat with older API deploys that haven't been
+  // upgraded to the tiered flow yet — treat absence as `external` per the
+  // server's backfill behaviour.
+  tier: z.enum(PEER_REVIEW_TIERS).optional(),
   peer_review_round: z.number().int(),
   severity: z.enum(PEER_REVIEW_SEVERITIES),
   category: z.enum(PEER_REVIEW_CATEGORIES),
@@ -1128,6 +1167,10 @@ export const peerReviewListSchema = z.object({
   peer_review_round: z.number().int(),
   peer_review_required_count: z.number().int(),
   reviews_filed: z.number().int(),
+  // Per-tier counters added in v0.4.0. Optional for forward-compat with
+  // pre-tier API deploys; sum equals `reviews_filed` on tiered deploys.
+  reviews_filed_internal: z.number().int().optional(),
+  reviews_filed_external: z.number().int().optional(),
   reviews: z.array(peerReviewReadSchema),
 });
 export type PeerReviewList = z.infer<typeof peerReviewListSchema>;
