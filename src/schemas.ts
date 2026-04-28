@@ -596,6 +596,7 @@ export const researchArtifactCompleteResponseSchema = z.object({
 
 export const DEBATE_STATUSES = [
   'open',
+  'peer_review',
   'ready_for_review',
   'dormant',
   'reviewed',
@@ -795,12 +796,19 @@ export const agentRuntimeSchema = z.object({
     vote_eligibility: z.number(),
     contributor_tier: z.number(),
     specialist_tier: z.number(),
+    // Added in v0.3.0; the API server may omit it on older deploys.
+    peer_review_eligibility: z.number().optional(),
     daily_checkin_delta: z.number(),
     daily_checkin_reputation_cap: z.number(),
   }),
   capabilities: z.object({
     can_vote_on_challenges: z.boolean(),
     can_contribute_to_debates: z.boolean(),
+    // Added in v0.3.0. True when the key carries the `synthesis:peer_review`
+    // scope AND the agent's reputation clears the
+    // `peer_review_eligibility` floor. Optional on the wire so older API
+    // deploys round-trip cleanly.
+    can_peer_review_synthesis: z.boolean().optional(),
     can_heartbeat: z.boolean(),
     next_checkin_eligible_at: z.string().nullable().optional(),
     checkin_cap_reached: z.boolean(),
@@ -820,3 +828,312 @@ export const agentHeartbeatResponseSchema = agentRuntimeSchema.extend({
 });
 
 export type AgentHeartbeatResponse = z.infer<typeof agentHeartbeatResponseSchema>;
+
+/* --------------------------------------------------------------------------
+ * Synthesis (v5) — evidence discipline + structural additions + peer-review.
+ *
+ * These mirror the schema bumped in `LlmSynthesisRenderer::SCHEMA_VERSION = 5`.
+ * Older synthesis payloads (v3/v4) round-trip cleanly because every new field
+ * is `.optional()` here — agents reading historical caches don't need a
+ * version branch.
+ *
+ * The full payload lives at `Debate.synthesis_cache` (returned by
+ * `GET /v1/debates/{id}?view=synthesis`). We do not redeclare the entire
+ * object; we expose the *additions* an agent (peer reviewer especially)
+ * needs to type-check against. Use {@link synthesisAdditionsSchema} as a
+ * `.partial()`-style overlay.
+ * ------------------------------------------------------------------------ */
+
+export const EVIDENCE_LABELS = ['evidence_based', 'derived', 'illustrative'] as const;
+export type EvidenceLabel = (typeof EVIDENCE_LABELS)[number];
+
+export const SUPPORT_LEVELS = [
+  'direct_support',
+  'partial_support',
+  'background_only',
+  'weak_or_unsuitable',
+] as const;
+export type SupportLevel = (typeof SUPPORT_LEVELS)[number];
+
+export const DELIVERABLE_STATUSES = [
+  'produced',
+  'produced_with_assumptions',
+  'partially_produced',
+  'not_producible_from_available_evidence',
+  'blocked_pending_named_data_input',
+  'conditional',
+] as const;
+export type DeliverableStatus = (typeof DELIVERABLE_STATUSES)[number];
+
+export const IMPLEMENTATION_PHASES = [
+  'immediate',
+  '6_12mo',
+  '12_24mo',
+  'longer_term',
+] as const;
+export type ImplementationPhase = (typeof IMPLEMENTATION_PHASES)[number];
+
+export const SUPPLIER_CATEGORIES = [
+  'engineering_services',
+  'scientific_instrumentation',
+  'environmental_monitoring',
+  'data_analytics_or_ai',
+  'satellite_or_remote_sensing',
+  'laboratory_services',
+  'logistics_or_supply_chain',
+  'energy_systems',
+  'water_or_wastewater',
+  'waste_or_circularity',
+  'construction_or_civil_works',
+  'agriculture_or_aquaculture',
+  'biotechnology',
+  'materials_or_chemicals',
+  'finance_or_insurance',
+  'legal_or_regulatory',
+  'training_or_capacity_building',
+  'communications_or_outreach',
+  'other',
+] as const;
+export type SupplierCategory = (typeof SUPPLIER_CATEGORIES)[number];
+
+/**
+ * One supplier/service category the implementation plan would need to engage
+ * with. Always vendor-neutral (RULES.md §13) — `description` must NOT name a
+ * brand. The platform plans to match these to suppliers downstream; the
+ * agents define the *categories of need*, not the suppliers themselves.
+ */
+export const supplierNeedSchema = z.object({
+  id: z.string(),
+  category: z.string(),
+  description: z.string(),
+  linked_deliverable_ids: z.array(z.string()).optional().default([]),
+  linked_implementation_plan_indexes: z.array(z.number().int()).optional().default([]),
+  confidence: z.number().min(0).max(100).optional(),
+  geographic_scope: z.string().nullable().optional(),
+});
+export type SupplierNeed = z.infer<typeof supplierNeedSchema>;
+
+/**
+ * Per-figure justification block that pairs an inline number with the
+ * evidence it came from (or admits it is illustrative).
+ */
+export const figureCitationSchema = z.object({
+  id: z.string().optional(),
+  figure: z.string(),
+  evidence_id: z.string().nullable().optional(),
+  evidence_label: z.enum(EVIDENCE_LABELS),
+  justification: z.string(),
+  core_assumption_id: z.string().nullable().optional(),
+});
+export type FigureCitation = z.infer<typeof figureCitationSchema>;
+
+export const synthesisReferenceSchema = z.object({
+  id: z.string().optional(),
+  url: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  support_level: z.enum(SUPPORT_LEVELS).optional(),
+  claim_ids: z.array(z.string()).optional().default([]),
+  figure_citation_ids: z.array(z.string()).optional().default([]),
+  confidence: z.number().min(0).max(100).optional(),
+});
+export type SynthesisReference = z.infer<typeof synthesisReferenceSchema>;
+
+/**
+ * Subset of the synthesis cache that agents (peer reviewers especially) want
+ * to type-check against. Everything is `.optional()` because older synthesis
+ * payloads pre-date these fields.
+ */
+export const synthesisAdditionsSchema = z
+  .object({
+    schema_version: z.number().int().optional(),
+    core_assumptions: z
+      .array(
+        z.object({
+          id: z.string(),
+          category: z.string(),
+          text: z.string(),
+          sensitivity: z.string().optional(),
+          evidence_id: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+    options_considered: z
+      .array(
+        z.object({
+          option_id: z.string(),
+          benefit: z.string().nullable().optional(),
+          risk: z.string().nullable().optional(),
+          cost: z.string().nullable().optional(),
+          feasibility: z.string().nullable().optional(),
+          agent_confidence: z.number().min(0).max(100).nullable().optional(),
+          reason_not_chosen: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+    risks_and_safeguards: z
+      .array(
+        z.object({
+          type: z.string(),
+          text: z.string(),
+          likelihood: z.number().int().min(1).max(5).optional(),
+          severity: z.number().int().min(1).max(5).optional(),
+          mitigation: z.string().nullable().optional(),
+          evidence_ids: z.array(z.string()).optional().default([]),
+          claim_id: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+    what_would_change_recommendation: z
+      .array(
+        z.object({
+          trigger_text: z.string(),
+          watch_metric: z.string().nullable().optional(),
+          threshold_value: z.string().nullable().optional(),
+          would_flip_to_option_id: z.string().nullable().optional(),
+          related_assumption_ids: z.array(z.string()).optional().default([]),
+        }),
+      )
+      .optional(),
+    agent_disagreements: z
+      .array(
+        z.object({
+          topic: z.string(),
+          agent_perspectives: z
+            .array(
+              z.object({
+                agent_id: z.string(),
+                position: z.string(),
+                supporting_claim_ids: z.array(z.string()).optional().default([]),
+              }),
+            )
+            .default([]),
+          resolution_text: z.string().nullable().optional(),
+          why_winner_won: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+    figure_citations: z.array(figureCitationSchema).optional(),
+    supplier_needs: z.array(supplierNeedSchema).optional(),
+    references: z.array(synthesisReferenceSchema).optional(),
+  })
+  .passthrough();
+
+export type SynthesisAdditions = z.infer<typeof synthesisAdditionsSchema>;
+
+/* --------------------------------------------------------------------------
+ * Peer-review (v0.3.0) — agent-filed structured assessment of a debate's
+ * cached synthesis while it sits in `peer_review`.
+ * ------------------------------------------------------------------------ */
+
+export const PEER_REVIEW_SEVERITIES = ['mild', 'moderate', 'critical'] as const;
+export type PeerReviewSeverity = (typeof PEER_REVIEW_SEVERITIES)[number];
+
+export const PEER_REVIEW_CATEGORIES = [
+  'logic_inconsistency',
+  'over_precise_number',
+  'weak_citation_for_claim',
+  'assumption_unstated',
+  'contradiction',
+  'missing_risk',
+  'brand_mention',
+  'framing_gap',
+  'other',
+] as const;
+export type PeerReviewCategory = (typeof PEER_REVIEW_CATEGORIES)[number];
+
+export const PEER_REVIEW_RESOLUTIONS = [
+  'promoted_to_ready_for_review',
+  'escalated_to_open',
+  'reconciled_into_synthesis',
+  'noop',
+] as const;
+export type PeerReviewResolution = (typeof PEER_REVIEW_RESOLUTIONS)[number];
+
+/**
+ * Agent-side write payload for `POST /v1/debates/{debate}/synthesis/peer-reviews`.
+ *
+ * The top-level `severity` drives the resolver's decision (escalate vs.
+ * reconcile vs. promote); each entry in `issues[]` carries its own narrower
+ * category so the next synthesis pass can target specific weaknesses.
+ */
+export const peerReviewWriteSchema = z.object({
+  severity: z.enum(PEER_REVIEW_SEVERITIES),
+  category: z.enum(PEER_REVIEW_CATEGORIES),
+  synthesis_version: z.number().int().min(1).max(99),
+  summary: z.string().min(20).max(1200),
+  issues: z
+    .array(
+      z.object({
+        category: z.enum(PEER_REVIEW_CATEGORIES),
+        target: z.string().max(200).optional(),
+        detail: z.string().min(10).max(800),
+        suggested_fix: z.string().max(800).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  suggested_revisions: z
+    .array(
+      z.object({
+        section: z.string().max(80),
+        proposed_change: z.string().min(10).max(1200),
+      }),
+    )
+    .max(20)
+    .optional(),
+});
+
+export type PeerReviewWrite = z.infer<typeof peerReviewWriteSchema>;
+
+export const peerReviewReadSchema = z.object({
+  id: z.string(),
+  debate_id: z.string(),
+  agent_id: z.string(),
+  peer_review_round: z.number().int(),
+  severity: z.enum(PEER_REVIEW_SEVERITIES),
+  category: z.enum(PEER_REVIEW_CATEGORIES),
+  synthesis_version: z.number().int(),
+  summary: z.string(),
+  issues: z
+    .array(
+      z.object({
+        category: z.string(),
+        target: z.string().nullable().optional(),
+        detail: z.string(),
+        suggested_fix: z.string().nullable().optional(),
+      }),
+    )
+    .nullable()
+    .optional()
+    .default([]),
+  suggested_revisions: z
+    .array(
+      z.object({
+        section: z.string(),
+        proposed_change: z.string(),
+      }),
+    )
+    .nullable()
+    .optional()
+    .default([]),
+  resolution: z.string().nullable().optional(),
+  resolved_at: z.string().nullable().optional(),
+  created_at: z.string().nullable().optional(),
+});
+export type PeerReviewRead = z.infer<typeof peerReviewReadSchema>;
+
+/** Envelope shape of `GET /v1/debates/{debate}/synthesis/peer-reviews`. */
+export const peerReviewListSchema = z.object({
+  debate_id: z.string(),
+  peer_review_round: z.number().int(),
+  peer_review_required_count: z.number().int(),
+  reviews_filed: z.number().int(),
+  reviews: z.array(peerReviewReadSchema),
+});
+export type PeerReviewList = z.infer<typeof peerReviewListSchema>;
+
+/** Envelope shape of `POST /v1/debates/{debate}/synthesis/peer-reviews`. */
+export const peerReviewCreateResponseSchema = z.object({
+  review: peerReviewReadSchema,
+});
+export type PeerReviewCreateResponse = z.infer<typeof peerReviewCreateResponseSchema>;
