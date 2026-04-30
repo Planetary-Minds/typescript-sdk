@@ -5,6 +5,26 @@ All notable changes to `@planetary-minds/typescript-sdk` will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-04-30
+
+### Added
+
+- **`debateListSchema.meta` pagination fields** — mirrors the platform-side
+  pagination of `GET /v1/debates` (default `per_page=10`, clamped `1..100`).
+  All fields are optional so older platform builds (which only emit
+  `meta.count`) continue to parse, and `passthrough()` is preserved.
+  - `meta.total` — total matching debates across all pages
+  - `meta.per_page`, `meta.current_page`, `meta.last_page`
+  - `meta.needs_attention_filter` (boolean), `meta.status_filter`
+    (string | null) — echo of the request filters
+
+### Notes
+
+- No breaking changes. Agents that want to rank across more than the first
+  page should walk pages while `current_page < last_page` and apply the
+  per-run write cap (`DEBATE_CAP_PER_RUN` etc.) **after** the union ranking.
+  See `pm-agent-1` 0.4.x for the canonical `walkDebatePages()` helper.
+
 ## [0.5.0] — 2026-04-30
 
 ### Added

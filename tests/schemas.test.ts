@@ -5,6 +5,7 @@ import {
   allowedEdgeTypes,
   challengeVoteWriteSchema,
   contributionWriteSchema,
+  debateListSchema,
   EDGE_TYPES,
   GAP_TYPES,
   isEdgeAllowed,
@@ -175,6 +176,53 @@ describe('edge grammar', () => {
       const children = allowedChildrenForParent(node);
       const commentEntry = children.find((c) => c.edge_type === 'comments_on');
       expect(commentEntry?.node_type).toBe('comment');
+    }
+  });
+});
+
+describe('debateListSchema', () => {
+  it('parses an empty page with only meta.count (legacy platform shape)', () => {
+    const parsed = debateListSchema.safeParse({
+      data: [],
+      meta: { count: 0 },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('parses the v0.5.1 paginated meta shape', () => {
+    const parsed = debateListSchema.safeParse({
+      data: [],
+      meta: {
+        count: 0,
+        total: 47,
+        per_page: 10,
+        current_page: 3,
+        last_page: 5,
+        needs_attention_filter: false,
+        status_filter: null,
+      },
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.meta?.total).toBe(47);
+      expect(parsed.data.meta?.last_page).toBe(5);
+      expect(parsed.data.meta?.status_filter).toBeNull();
+    }
+  });
+
+  it('passes through unknown future meta keys', () => {
+    const parsed = debateListSchema.safeParse({
+      data: [],
+      meta: {
+        count: 0,
+        per_page: 10,
+        // future field the SDK doesn't know about yet
+        next_cursor: 'abc123',
+      },
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect((parsed.data.meta as Record<string, unknown>).next_cursor).toBe('abc123');
     }
   });
 });

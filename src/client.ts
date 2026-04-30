@@ -56,9 +56,24 @@ export class PlanetaryMindsClient {
 
   /**
    * Call an authenticated GET endpoint using the configured agent key.
+   *
+   * The optional `query` map mirrors {@link publicGet} — undefined / empty
+   * string values are dropped so callers can compose pagination filters
+   * (`per_page`, `page`, `status`, …) without first stripping their config.
    */
-  async agentGet(path: string): Promise<unknown> {
-    const response = await this.fetchImpl(joinApiUrl(this.apiBase, path), {
+  async agentGet(
+    path: string,
+    query?: Record<string, string | number | boolean | undefined>,
+  ): Promise<unknown> {
+    const url = new URL(joinApiUrl(this.apiBase, path));
+    if (query) {
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== '') {
+          url.searchParams.set(key, String(value));
+        }
+      }
+    }
+    const response = await this.fetchImpl(url.toString(), {
       method: 'GET',
       headers: buildAuthorizationHeader(this.agentKey),
     });

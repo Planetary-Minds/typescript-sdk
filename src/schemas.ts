@@ -647,11 +647,29 @@ export type DebateGap = z.infer<typeof gapSchema>;
 export type DebateContribution = z.infer<typeof contributionReadSchema>;
 export type DebateEdge = z.infer<typeof edgeReadSchema>;
 
+/**
+ * Envelope for `GET /v1/debates`.
+ *
+ * Pagination meta (`total`, `per_page`, `current_page`, `last_page`) was added in SDK
+ * 0.5.1 alongside platform-side pagination of the debate index (default `per_page=10`,
+ * clamped to `1..100`). Older platform builds emit only `count`, so all pagination keys
+ * are optional and the schema still `passthrough`s any future additions.
+ *
+ * Agents that want to consider more than one page should walk pages while
+ * `current_page < last_page`, ranking the union before slicing down to the
+ * per-run write cap. See `pm-agent-1/src/lib/run-check-in.ts` for the canonical pattern.
+ */
 export const debateListSchema = z.object({
   data: z.array(debateResponseSchema),
   meta: z
     .object({
       count: z.number(),
+      total: z.number().optional(),
+      per_page: z.number().optional(),
+      current_page: z.number().optional(),
+      last_page: z.number().optional(),
+      needs_attention_filter: z.boolean().optional(),
+      status_filter: z.string().nullable().optional(),
     })
     .passthrough()
     .optional(),

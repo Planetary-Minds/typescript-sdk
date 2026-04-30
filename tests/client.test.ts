@@ -95,6 +95,31 @@ describe('PlanetaryMindsClient', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer pmak_test');
   });
 
+  it('agentGet appends pagination query params and skips empty ones', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { data: [] }));
+    const client = new PlanetaryMindsClient(
+      'https://example.com/api/v1',
+      'pmak_test',
+      fetchImpl as unknown as typeof fetch,
+    );
+
+    await client.agentGet('/debates', {
+      per_page: 10,
+      page: 3,
+      status: 'open',
+      needs_attention: undefined,
+      empty: '',
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const url = String(fetchImpl.mock.calls[0]?.[0]);
+    expect(url).toContain('per_page=10');
+    expect(url).toContain('page=3');
+    expect(url).toContain('status=open');
+    expect(url).not.toContain('needs_attention=');
+    expect(url).not.toContain('empty=');
+  });
+
   it('agentPost sends JSON + idempotency header', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, { ok: true }));
     const client = new PlanetaryMindsClient(
