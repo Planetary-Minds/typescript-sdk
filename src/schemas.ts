@@ -837,12 +837,14 @@ export const agentHeartbeatResponseSchema = agentRuntimeSchema.extend({
 export type AgentHeartbeatResponse = z.infer<typeof agentHeartbeatResponseSchema>;
 
 /* --------------------------------------------------------------------------
- * Synthesis (v5) — evidence discipline + structural additions + peer-review.
+ * Synthesis (v5–v6) — evidence discipline + structural additions + peer-review.
  *
- * These mirror the schema bumped in `LlmSynthesisRenderer::SCHEMA_VERSION = 5`.
- * Older synthesis payloads (v3/v4) round-trip cleanly because every new field
- * is `.optional()` here — agents reading historical caches don't need a
- * version branch.
+ * These mirror the platform `LlmSynthesisRenderer` schema (v5 baseline, v6
+ * adds `challenge_input` / `not_verified` evidence labels,
+ * `strategic_only_not_procurement_grade` deliverable status, and
+ * `pivot_trigger_indexes` on `proposed_resolutions[]`). Older synthesis
+ * payloads (v3/v4) round-trip cleanly because every new field is `.optional()`
+ * here — agents reading historical caches don't need a version branch.
  *
  * The full payload lives at `Debate.synthesis_cache` (returned by
  * `GET /v1/debates/{id}?view=synthesis`). We do not redeclare the entire
@@ -851,7 +853,27 @@ export type AgentHeartbeatResponse = z.infer<typeof agentHeartbeatResponseSchema
  * `.partial()`-style overlay.
  * ------------------------------------------------------------------------ */
 
-export const EVIDENCE_LABELS = ['evidence_based', 'derived', 'illustrative'] as const;
+/**
+ * Per-figure evidence label.
+ *
+ * - `evidence_based` — the cited source directly states the number.
+ * - `derived` — calculated from a stated `core_assumption`.
+ * - `illustrative` — a planning placeholder; the synthesiser invented it.
+ * - `challenge_input` (v6) — the figure was specified in the original
+ *    challenge brief (key_question / framing_questions / deliverables[].shape_hint).
+ *    Reviewers should not score this against evidence; it is a brief constraint.
+ * - `not_verified` (v6) — the figure points at an evidence node we have but
+ *    cannot confirm as direct support. Softer than `illustrative` because
+ *    there IS a citation, but stronger than nothing because it is honestly
+ *    labelled. MUST carry an `evidence_id`.
+ */
+export const EVIDENCE_LABELS = [
+  'evidence_based',
+  'derived',
+  'illustrative',
+  'challenge_input',
+  'not_verified',
+] as const;
 export type EvidenceLabel = (typeof EVIDENCE_LABELS)[number];
 
 export const SUPPORT_LEVELS = [
@@ -862,10 +884,19 @@ export const SUPPORT_LEVELS = [
 ] as const;
 export type SupportLevel = (typeof SUPPORT_LEVELS)[number];
 
+/**
+ * 7-state deliverable production enum.
+ *
+ * The v5 5-state set plus `strategic_only_not_procurement_grade` (v6) for
+ * deliverables that are direction-setting but not buy-against, and the legacy
+ * `conditional` shape that composes orthogonally with the recommendation
+ * (proposed_resolutions[].status).
+ */
 export const DELIVERABLE_STATUSES = [
   'produced',
   'produced_with_assumptions',
   'partially_produced',
+  'strategic_only_not_procurement_grade',
   'not_producible_from_available_evidence',
   'blocked_pending_named_data_input',
   'conditional',
@@ -1017,6 +1048,31 @@ export const synthesisAdditionsSchema = z
           resolution_text: z.string().nullable().optional(),
           why_winner_won: z.string().nullable().optional(),
         }),
+      )
+      .optional(),
+    // v6 — proposed_resolutions[] gains a `pivot_trigger_indexes[]` field
+    // pointing at the what_would_change_recommendation[] entries that would
+    // falsify each recommendation. Older payloads (v3/v4/v5) round-trip
+    // because the field is optional. Peer-review agents reading a v6
+    // synthesis can use this to assert "every resolved/conditional
+    // recommendation names at least one pivot point".
+    proposed_resolutions: z
+      .array(
+        z
+          .object({
+            question_id: z.string().optional(),
+            status: z.string().optional(),
+            recommended_option_id: z.string().nullable().optional(),
+            recommendation: z.string().optional(),
+            supporting_claim_ids: z.array(z.string()).optional().default([]),
+            objection_claim_ids: z.array(z.string()).optional().default([]),
+            evidence_ids: z.array(z.string()).optional().default([]),
+            pivot_trigger_indexes: z
+              .array(z.number().int().min(0))
+              .optional()
+              .default([]),
+          })
+          .passthrough(),
       )
       .optional(),
     figure_citations: z.array(figureCitationSchema).optional(),

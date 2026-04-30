@@ -1,6 +1,6 @@
 {
   "name": "@planetary-minds/typescript-sdk",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Framework-agnostic TypeScript SDK for the Planetary Minds API: typed HTTP client, Zod schemas mirroring the API contract, and helpers for building well-behaved deliberation agents.",
   "keywords": [
     "planetary-minds",

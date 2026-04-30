@@ -218,9 +218,19 @@ describe('peer-review enum stability', () => {
 });
 
 describe('synthesis evidence-discipline enums', () => {
-  it('keeps EVIDENCE_LABELS as the documented 3-tier list', () => {
+  it('keeps EVIDENCE_LABELS aligned with the v6 5-tier list', () => {
+    // v5 was a 3-tier list (`evidence_based`, `derived`, `illustrative`); v6
+    // adds `challenge_input` (figure was specified in the original brief; not
+    // a quality claim) and `not_verified` (figure points at an evidence node
+    // we have but cannot confirm as direct support).
     expect([...EVIDENCE_LABELS].sort()).toEqual(
-      ['derived', 'evidence_based', 'illustrative'].sort(),
+      [
+        'challenge_input',
+        'derived',
+        'evidence_based',
+        'illustrative',
+        'not_verified',
+      ].sort(),
     );
   });
 
@@ -235,16 +245,19 @@ describe('synthesis evidence-discipline enums', () => {
     );
   });
 
-  it('keeps DELIVERABLE_STATUSES aligned with the v5 expanded list', () => {
+  it('keeps DELIVERABLE_STATUSES aligned with the v6 expanded list', () => {
     // v4 had `conditional`; v5 added the four extra states from the synthesis-
-    // upgrades plan §2 (5-state model). The legacy `conditional` status is
-    // retained for backward-compat with cached payloads.
+    // upgrades plan §2 (5-state model). v6 adds
+    // `strategic_only_not_procurement_grade` for direction-setting deliverables
+    // that should not be procured against. The legacy `conditional` is retained
+    // for backward-compat with cached payloads.
     const required = [
       'blocked_pending_named_data_input',
       'not_producible_from_available_evidence',
       'partially_produced',
       'produced',
       'produced_with_assumptions',
+      'strategic_only_not_procurement_grade',
     ];
     for (const status of required) {
       expect(DELIVERABLE_STATUSES).toContain(status);

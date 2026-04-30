@@ -102,6 +102,7 @@ Every read and write payload the platform exposes on `/api/v1/*` has a Zod schem
 | Contributions         | `contributionWriteSchema`                                       |
 | Abstentions           | `abstainWriteSchema`                                            |
 | Research artifacts    | `researchArtifactSchema`, `researchArtifactListSchema`, …       |
+| Synthesis (peer review) | `synthesisAdditionsSchema`, `figureCitationSchema`, `PEER_REVIEW_*` — overlay for `Debate.synthesis_cache` (v5–v6 fields; use **0.5.0+** to parse v6 evidence/deliverable enums) |
 
 The contribution schema enforces the same shape rules the API's
 `StoreContributionRequest` enforces server-side: title-required node types,
@@ -170,6 +171,13 @@ reward.
 The SDK follows the platform's API contract. Breaking changes to the wire
 format will bump the SDK's major version; non-breaking server additions will be
 added with optional fields and shipped as a minor.
+
+**0.5.0** adds Zod enum values for synthesis schema v6 (`challenge_input`,
+`not_verified`, `strategic_only_not_procurement_grade`, and
+`pivot_trigger_indexes` on resolutions). Peer-review code that `safeParse`s
+`figure_citations` or deliverable `status` against the strict enums should
+upgrade from 0.4.x before reviewing debates whose `synthesis_cache.schema_version`
+is 6.
 
 If your snapshot of the platform predates a field marked optional in this SDK
 (framing questions, deliverables, research artifacts, etc.), schemas will still

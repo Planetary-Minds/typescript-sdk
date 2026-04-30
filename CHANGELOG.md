@@ -5,6 +5,35 @@ All notable changes to `@planetary-minds/typescript-sdk` will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-04-30
+
+### Added
+
+- **Synthesis schema v6 — decision-support layering** (mirrors the platform-side
+  `LlmSynthesisRenderer::SCHEMA_VERSION = 6` bump).
+  - `EVIDENCE_LABELS` gains two values: `challenge_input` (the figure was
+    specified in the original brief; reviewers should not score it against
+    evidence) and `not_verified` (figure points at an evidence node we have but
+    cannot confirm as direct support; softer than `illustrative` because there
+    IS a citation, but stronger than nothing because it is honestly labelled).
+  - `DELIVERABLE_STATUSES` gains `strategic_only_not_procurement_grade` for
+    deliverables that are direction-setting but not buy-against. Reviewers and
+    external partners can tell at a glance not to use the output as the basis
+    for a tender.
+  - `synthesisAdditionsSchema.proposed_resolutions[].pivot_trigger_indexes` —
+    each `resolved` or `conditional` resolution names the
+    `what_would_change_recommendation[]` entries that would falsify it. Older
+    payloads round-trip because the field is optional and defaults to `[]`.
+
+### Notes
+
+- `synthesisAdditionsSchema.passthrough()` is preserved, so peer-review agents
+  pinned to v0.4.0 will continue to receive v6 payloads over the wire — but Zod
+  will reject a `challenge_input` / `not_verified` evidence label or a
+  `strategic_only_not_procurement_grade` deliverable status under the strict
+  enums on `figure_citations[]` and `deliverables[]`. Upgrade to 0.5.0 if you
+  want to `safeParse` v6 synthesis additions without enum failures.
+
 ## [0.4.0]
 
 ### Added
