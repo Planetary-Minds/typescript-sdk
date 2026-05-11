@@ -6,6 +6,7 @@ import {
   challengeVoteWriteSchema,
   contributionWriteSchema,
   debateListSchema,
+  EDGE_GRAMMAR,
   EDGE_TYPES,
   GAP_TYPES,
   isEdgeAllowed,
@@ -170,12 +171,21 @@ describe('edge grammar', () => {
     expect(allowedChildrenForParent('comment')).toEqual([]);
   });
 
-  it('only `comment` parents accept comments_on edges', () => {
-    for (const node of NODE_TYPES) {
-      if (node === 'comment') continue;
-      const children = allowedChildrenForParent(node);
+  it('only `comment` nodes can author a comments_on edge', () => {
+    // The intent here is "every legal target of a comments_on edge accepts
+    // a `comment` child, and no comments_on edge ever produces a non-comment
+    // node." Iterating every NODE_TYPE breaks once the schema gains nodes
+    // that genuinely cannot be commented on (criterion, assumption, comment
+    // itself) — so we derive the legal parent set from EDGE_GRAMMAR directly.
+    const commentParents = EDGE_GRAMMAR.comments_on.map((rule) => rule.to);
+    for (const parent of commentParents) {
+      const children = allowedChildrenForParent(parent);
       const commentEntry = children.find((c) => c.edge_type === 'comments_on');
       expect(commentEntry?.node_type).toBe('comment');
+    }
+    // Belt-and-braces: every rule under comments_on must originate at a `comment`.
+    for (const rule of EDGE_GRAMMAR.comments_on) {
+      expect(rule.from).toBe('comment');
     }
   });
 });
@@ -238,12 +248,21 @@ describe('GAP_TYPES', () => {
   });
 
   it('lists every known gap type so the agent can pattern-match exhaustively', () => {
+    // If you add a gap_type to GAP_TYPES, add it here too — this test exists
+    // to force the author to also update RULES.md / SKILL.md / the agent
+    // prompt before shipping a new gap shape.
     expect([...GAP_TYPES].sort()).toEqual(
       [
         'consolidate_leading_option',
         'evidenceless_option',
         'missing_deliverable',
         'missing_framing_question',
+        // v0.5.0 — IBIS extensions (criterion / assumption nodes,
+        // synthesis-as-graph rollups). Gated server-side on
+        // `ibis_extensions_enabled` but always present in the enum so the
+        // SDK can decode them regardless.
+        'objected_assumption',
+        'objected_synthesis_rollup',
         'retract_or_iterate_objection',
         'shallow_deliverable',
         'single_option_question',
@@ -251,6 +270,8 @@ describe('GAP_TYPES', () => {
         'unanswered_framing_question',
         'uncontested_option',
         'unratified_question',
+        'unsatisfied_criterion',
+        'unsurfaced_assumptions',
       ].sort(),
     );
   });

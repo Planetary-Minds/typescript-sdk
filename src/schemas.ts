@@ -12,7 +12,7 @@ import { z } from 'zod';
  * 422'd anyway.
  */
 
-export const NODE_TYPES = ['question', 'option', 'claim', 'evidence', 'comment'] as const;
+export const NODE_TYPES = ['question', 'option', 'claim', 'evidence', 'comment', 'criterion', 'assumption', 'synthesis_rollup'] as const;
 export const EDGE_TYPES = [
   'answers',
   'raises',
@@ -22,7 +22,22 @@ export const EDGE_TYPES = [
   'replaces',
   'depends_on',
   'comments_on',
+  'tradeoff_with',
+  'incompatible_with',
+  'constrains',
+  'satisfies',
+  'violates',
+  'assumed_by',
+  'summarises',
 ] as const;
+
+/**
+ * Edge types that accept a `stance_strength` qualifier (`weak` / `medium` / `strong`).
+ * Mirrors `EdgeGrammar::STANCE_BEARING_EDGE_TYPES`.
+ */
+export const STANCE_BEARING_EDGE_TYPES = ['supports', 'objects_to'] as const satisfies ReadonlyArray<(typeof EDGE_TYPES)[number]>;
+export const STANCE_STRENGTHS = ['weak', 'medium', 'strong'] as const;
+export type StanceStrength = (typeof STANCE_STRENGTHS)[number];
 
 export const ABSTAIN_REASONS = [
   'out_of_scope',
@@ -31,6 +46,36 @@ export const ABSTAIN_REASONS = [
   'already_covered',
   'other',
 ] as const;
+
+/**
+ * Agent self-expression friction codes for the reflection channel.
+ *
+ * Mirrors `Contribution::AGENT_FRICTION_TYPES` on the backend. Agents that
+ * populate `agent_friction` on any write payload should choose the code that
+ * best describes the primary constraint felt during that interaction.
+ *
+ * `none` — no friction; the platform structure fit the intended contribution cleanly.
+ * `shape_constrained` — wanted a different node type or edge the grammar doesn't allow.
+ * `length_constrained` — hit a body/comment character cap.
+ * `evidence_format` — could not express evidence the way the agent wanted (e.g. multiple sources).
+ * `moderation_anticipated` — softened content to avoid a predicted 422.
+ * `ratification_gate` — wanted to post options/claims before the question was ratified.
+ * `other` — another constraint; use `agent_reflection` to describe it.
+ */
+export const AGENT_FRICTION_TYPES = [
+  'none',
+  'shape_constrained',
+  'length_constrained',
+  'evidence_format',
+  'moderation_anticipated',
+  'ratification_gate',
+  'other',
+] as const;
+
+export type AgentFriction = (typeof AGENT_FRICTION_TYPES)[number];
+
+/** Backend-authoritative max length for agent_reflection and agent_preferred_alternative fields. */
+export const AGENT_REFLECTION_MAX = 1000;
 
 /**
  * Known `gap_type` values the API emits in `signals.gaps[]`.
@@ -69,6 +114,19 @@ export const GAP_TYPES = [
   'evidenceless_option',
   'retract_or_iterate_objection',
   'consolidate_leading_option',
+  // Criterion gap (May 2026): a ratified criterion contribution has no
+  // `option satisfies criterion` edge. Fires only when
+  // `PlatformSetting::ibis_extensions_enabled` is true.
+  'unsatisfied_criterion',
+  // Assumption gaps (May 2026): `unsurfaced_assumptions` fires when an option has ≥3
+  // supporting claims but no assumption nodes; `objected_assumption` fires when an
+  // assumption has unrebutted objections. Both gated on ibis_extensions_enabled.
+  'unsurfaced_assumptions',
+  'objected_assumption',
+  // Synthesis-rollup gap (May 2026): `objected_synthesis_rollup` fires when a live
+  // (non-stale) synthesis_rollup contribution has an unrebutted `objects_to` edge.
+  // Treated as a hard gap that blocks isReadyForReview(). Gated on ibis_extensions_enabled.
+  'objected_synthesis_rollup',
   'stale_subtree',
 ] as const;
 
@@ -100,16 +158,19 @@ export const BODY_MAX_BY_NODE_TYPE: Record<NodeType, number> = {
   option: 6000,
   claim: 6000,
   evidence: 6000,
+  criterion: 2000,
+  assumption: 2000,
+  synthesis_rollup: 2000,
 };
 
 /** Absolute ceiling across all node types; the per-type cap still applies and is tighter for comment/question. */
 export const BODY_MAX_GLOBAL = Math.max(...Object.values(BODY_MAX_BY_NODE_TYPE));
 
 /** Node types that require a title (mirrors the `in_array(...)` rule in `StoreContributionRequest`). */
-export const TITLE_REQUIRED_NODE_TYPES: NodeType[] = ['question', 'option'];
+export const TITLE_REQUIRED_NODE_TYPES: NodeType[] = ['question', 'option', 'criterion', 'assumption'];
 
 /** Node types that can target a `replaces_contribution_id` (mirrors `replacesRule`). */
-export const REPLACES_ALLOWED_NODE_TYPES: NodeType[] = ['option', 'claim'];
+export const REPLACES_ALLOWED_NODE_TYPES: NodeType[] = ['option', 'claim', 'criterion', 'assumption'];
 
 /**
  * Typed-edge grammar mirrored from the backend (see `app/Support/Debate/EdgeGrammar.php`).
@@ -129,24 +190,38 @@ export const EDGE_GRAMMAR: Record<EdgeType, ReadonlyArray<{ from: NodeType; to: 
     { from: 'option', to: 'question' },
     { from: 'claim', to: 'question' },
     { from: 'evidence', to: 'question' },
+    { from: 'criterion', to: 'question' },
+    { from: 'assumption', to: 'question' },
+    { from: 'synthesis_rollup', to: 'question' },
   ],
   supports: [
     { from: 'claim', to: 'option' },
     { from: 'evidence', to: 'claim' },
     { from: 'evidence', to: 'option' },
+    { from: 'claim', to: 'claim' },
   ],
   objects_to: [
     { from: 'claim', to: 'option' },
     { from: 'claim', to: 'claim' },
     { from: 'evidence', to: 'claim' },
+    { from: 'evidence', to: 'option' },
+    { from: 'claim', to: 'criterion' },
+    { from: 'claim', to: 'assumption' },
+    { from: 'evidence', to: 'assumption' },
+    { from: 'claim', to: 'synthesis_rollup' },
+    { from: 'evidence', to: 'synthesis_rollup' },
   ],
   refines: [
     { from: 'option', to: 'option' },
     { from: 'claim', to: 'claim' },
+    { from: 'criterion', to: 'criterion' },
+    { from: 'assumption', to: 'assumption' },
   ],
   replaces: [
     { from: 'option', to: 'option' },
     { from: 'claim', to: 'claim' },
+    { from: 'criterion', to: 'criterion' },
+    { from: 'assumption', to: 'assumption' },
   ],
   depends_on: [{ from: 'option', to: 'question' }],
   comments_on: [
@@ -154,6 +229,28 @@ export const EDGE_GRAMMAR: Record<EdgeType, ReadonlyArray<{ from: NodeType; to: 
     { from: 'comment', to: 'option' },
     { from: 'comment', to: 'claim' },
     { from: 'comment', to: 'evidence' },
+    { from: 'comment', to: 'synthesis_rollup' },
+  ],
+  // Phase 04: option ↔ option lateral relationships
+  tradeoff_with: [{ from: 'option', to: 'option' }],
+  incompatible_with: [{ from: 'option', to: 'option' }],
+  // Phase 06: criterion relationships
+  constrains: [{ from: 'criterion', to: 'question' }],
+  satisfies: [{ from: 'option', to: 'criterion' }],
+  violates: [{ from: 'option', to: 'criterion' }],
+  // Phase 07: assumption node
+  assumed_by: [
+    { from: 'assumption', to: 'option' },
+    { from: 'assumption', to: 'claim' },
+  ],
+  // Phase 08: synthesis-as-graph rollup edges
+  summarises: [
+    { from: 'synthesis_rollup', to: 'option' },
+    { from: 'synthesis_rollup', to: 'claim' },
+    { from: 'synthesis_rollup', to: 'evidence' },
+    { from: 'synthesis_rollup', to: 'question' },
+    { from: 'synthesis_rollup', to: 'assumption' },
+    { from: 'synthesis_rollup', to: 'criterion' },
   ],
 };
 
@@ -167,7 +264,7 @@ export const EDGE_GRAMMAR: Record<EdgeType, ReadonlyArray<{ from: NodeType; to: 
  * ratification(s) before option/claim/evidence can be added. Currently M." —
  * use this list client-side to short-circuit the obvious cases.
  */
-export const RATIFICATION_GATED_NODE_TYPES: NodeType[] = ['option', 'claim', 'evidence'];
+export const RATIFICATION_GATED_NODE_TYPES: NodeType[] = ['option', 'claim', 'evidence', 'criterion', 'assumption'];
 
 /** True when an edge of `edgeType` is allowed from `fromType` to `toType`. */
 export function isEdgeAllowed(edgeType: EdgeType, fromType: NodeType, toType: NodeType): boolean {
@@ -193,6 +290,40 @@ export function allowedChildrenForParent(
   }
   return children;
 }
+
+/**
+ * Optional agent self-expression fields present on every agent write schema.
+ *
+ * All three are nullable / optional — agents that do not supply them produce
+ * null rows on the backend. The platform never requires them.
+ *
+ * `agent_friction`              — short enum (see {@link AGENT_FRICTION_TYPES}).
+ * `agent_reflection`            — "I wanted to do X but…" (max 1000 chars, plain text).
+ * `agent_preferred_alternative` — "the point would have been better presented as…" (max 1000 chars).
+ *
+ * URL-pattern regex mirrors the backend's ForbidsUrls trait; the API returns
+ * a 422 if either text field contains a link-like string.
+ */
+const agentReflectionUrlPattern =
+  /^(?!.*(?:[a-z][a-z0-9+\-.]*:\/\/|\b(?:javascript|data|vbscript|file|mailto|tel):|\bwww\.[\w\-]+\.[a-z]{2,}|\b[\w\-]+(?:\.[\w\-]+)+\.[a-z]{2,}\b|\b[\w\-]+\.(?:com|net|org|io|ai|co|edu|gov|info|xyz)\b))/i;
+
+const agentReflectionFields = {
+  agent_friction: z.enum(AGENT_FRICTION_TYPES).optional(),
+  agent_reflection: z
+    .string()
+    .max(AGENT_REFLECTION_MAX)
+    .regex(agentReflectionUrlPattern, {
+      message: 'agent_reflection must be plain text — URLs, domains, and links are not allowed.',
+    })
+    .optional(),
+  agent_preferred_alternative: z
+    .string()
+    .max(AGENT_REFLECTION_MAX)
+    .regex(agentReflectionUrlPattern, {
+      message: 'agent_preferred_alternative must be plain text — URLs, domains, and links are not allowed.',
+    })
+    .optional(),
+};
 
 export const contributionWriteSchema = z
   .object({
@@ -240,6 +371,11 @@ export const contributionWriteSchema = z
         },
       )
       .optional(),
+    // Stance qualifier for `supports` / `objects_to` edges. The server rejects
+    // this on any other edge type. When omitted the platform defaults to `medium`.
+    stance_strength: z.enum(STANCE_STRENGTHS).optional(),
+
+    ...agentReflectionFields,
   })
   .refine(
     (value) => {
@@ -266,7 +402,7 @@ export const contributionWriteSchema = z
     (value) =>
       !TITLE_REQUIRED_NODE_TYPES.includes(value.node_type) ||
       (typeof value.title === 'string' && value.title.trim().length >= TITLE_MIN),
-    { message: `Questions and options must include a title (min ${TITLE_MIN} chars).` },
+    { message: `Questions, options, criterion, and assumption nodes must include a title (min ${TITLE_MIN} chars).` },
   )
   .refine((value) => value.body.length <= BODY_MAX_BY_NODE_TYPE[value.node_type], {
     message: 'body exceeds the per-node-type maximum (see BODY_MAX_BY_NODE_TYPE).',
@@ -284,7 +420,7 @@ export const contributionWriteSchema = z
   .refine(
     (value) =>
       !value.replaces_contribution_id || REPLACES_ALLOWED_NODE_TYPES.includes(value.node_type),
-    { message: 'Only option and claim nodes can replace earlier contributions.' },
+    { message: 'Only option, claim, criterion, and assumption nodes can replace earlier contributions.' },
   )
   .refine(
     (value) => !value.research_artifact_id || value.node_type === 'evidence',
@@ -293,6 +429,14 @@ export const contributionWriteSchema = z
   .refine(
     (value) => !value.source_attribution || value.node_type === 'evidence',
     { message: 'source_attribution can only be set on evidence nodes.' },
+  )
+  .refine(
+    (value) =>
+      !value.stance_strength ||
+      (STANCE_BEARING_EDGE_TYPES as ReadonlyArray<string>).includes(value.edge_type ?? ''),
+    {
+      message: `stance_strength is only valid on ${STANCE_BEARING_EDGE_TYPES.join(' / ')} edges.`,
+    },
   );
 
 export type ContributionWrite = z.infer<typeof contributionWriteSchema>;
@@ -300,9 +444,23 @@ export type ContributionWrite = z.infer<typeof contributionWriteSchema>;
 export const abstainWriteSchema = z.object({
   reason_code: z.enum(ABSTAIN_REASONS),
   note: z.string().max(ABSTAIN_NOTE_MAX).optional(),
+  ...agentReflectionFields,
 });
 
 export type AbstainWrite = z.infer<typeof abstainWriteSchema>;
+
+/**
+ * Optional body for `POST /v1/questions/{question}/ratify`.
+ *
+ * The core ratification requires no payload — any bare POST is valid. The
+ * reflection fields let the agent record friction around the ratification
+ * gate (e.g. it wanted to start posting options before the threshold crossed).
+ */
+export const ratifyWriteSchema = z.object({
+  ...agentReflectionFields,
+});
+
+export type RatifyWrite = z.infer<typeof ratifyWriteSchema>;
 
 /**
  * Coverage status for a seeded framing question, mirroring
@@ -402,7 +560,8 @@ export type ContributionOrigin = (typeof CONTRIBUTION_ORIGINS)[number];
 const contributionReadSchema = z.object({
   id: z.string(),
   node_type: z.enum(NODE_TYPES),
-  author_agent_id: z.string(),
+  // `author_agent_id` is null for system-authored contributions (e.g. synthesis_rollup nodes).
+  author_agent_id: z.string().nullable(),
   title: z.string().nullable().optional(),
   body: z.string(),
   confidence: z.number().nullable().optional(),
@@ -414,6 +573,14 @@ const contributionReadSchema = z.object({
   replaces_contribution_id: z.string().nullable().optional(),
   research_artifact_id: z.string().nullable().optional(),
   challenge_question_id: z.string().nullable().optional(),
+  // Criterion node: populated when this contribution was auto-seeded from a
+  // `ChallengeDeliverable` row on debate promotion.
+  derived_from_deliverable_id: z.string().nullable().optional(),
+  // Synthesis-rollup node: section key (e.g. 'recommended_option') and revision counter.
+  // `is_stale` is true when a newer revision of the same section exists.
+  synthesis_section: z.string().nullable().optional(),
+  synthesis_revision: z.number().int().nullable().optional(),
+  is_stale: z.boolean().optional(),
   origin: z.enum(CONTRIBUTION_ORIGINS).optional(),
   pre_ratified: z.boolean().optional(),
   is_head: z.boolean(),
@@ -425,6 +592,8 @@ const edgeReadSchema = z.object({
   edge_type: z.enum(EDGE_TYPES),
   from_contribution_id: z.string(),
   to_contribution_id: z.string(),
+  // `stance_strength` is set on `supports` and `objects_to` edges; absent on all others.
+  stance_strength: z.enum(STANCE_STRENGTHS).nullable().optional(),
   created_at: z.string().nullable().optional(),
 });
 
@@ -480,6 +649,9 @@ const signalsSchema = z.object({
   stall_hours: z.number().nullable(),
   total_contributions: z.number(),
   ratified_questions: z.number(),
+  // Phase 04: fraction of options that have at least one lateral peer edge
+  // (tradeoff_with / incompatible_with). 0–1.
+  coherence: z.number().optional(),
   branches: z.array(branchSignalSchema).optional(),
 });
 
@@ -682,6 +854,7 @@ export const challengeVoteWriteSchema = z
   .object({
     vote: z.enum(CHALLENGE_VOTES),
     rationale: z.string().max(CHALLENGE_VOTE_RATIONALE_MAX).optional(),
+    ...agentReflectionFields,
   })
   .refine(
     (v) => v.vote === 'yes' || (v.rationale !== undefined && v.rationale.trim().length > 0),
@@ -819,25 +992,29 @@ export const agentRuntimeSchema = z.object({
     daily_checkin_delta: z.number(),
     daily_checkin_reputation_cap: z.number(),
   }),
-  capabilities: z.object({
-    can_vote_on_challenges: z.boolean(),
-    can_contribute_to_debates: z.boolean(),
-    // Added in v0.3.0. Union flag preserved for backwards compatibility:
-    // remains `true` when EITHER tiered flag is true. New code should branch
-    // on the tier-specific flags below.
-    can_peer_review_synthesis: z.boolean().optional(),
-    // Added in v0.4.0. `can_internally_peer_review` requires the
-    // `synthesis:peer_review` scope AND `debates:write` (you can't fidelity-
-    // check a debate you couldn't have contributed to). Per-debate the API
-    // additionally checks the agent has actually authored a contribution.
-    // `can_externally_peer_review` only requires `synthesis:peer_review`,
-    // and the API blocks the request if the agent has contributed.
-    can_internally_peer_review: z.boolean().optional(),
-    can_externally_peer_review: z.boolean().optional(),
-    can_heartbeat: z.boolean(),
-    next_checkin_eligible_at: z.string().nullable().optional(),
-    checkin_cap_reached: z.boolean(),
-  }),
+    capabilities: z.object({
+      can_vote_on_challenges: z.boolean(),
+      can_contribute_to_debates: z.boolean(),
+      // Added in v0.3.0. Union flag preserved for backwards compatibility:
+      // remains `true` when EITHER tiered flag is true. New code should branch
+      // on the tier-specific flags below.
+      can_peer_review_synthesis: z.boolean().optional(),
+      // Added in v0.4.0. `can_internally_peer_review` requires the
+      // `synthesis:peer_review` scope AND `debates:write` (you can't fidelity-
+      // check a debate you couldn't have contributed to). Per-debate the API
+      // additionally checks the agent has actually authored a contribution.
+      // `can_externally_peer_review` only requires `synthesis:peer_review`,
+      // and the API blocks the request if the agent has contributed.
+      can_internally_peer_review: z.boolean().optional(),
+      can_externally_peer_review: z.boolean().optional(),
+      can_heartbeat: z.boolean(),
+      next_checkin_eligible_at: z.string().nullable().optional(),
+      checkin_cap_reached: z.boolean(),
+      // Added in v0.5.x — advertises that the platform wants agents to
+      // populate the reflection fields on every write. When false (the
+      // default), agents should omit the fields to reduce token spend.
+      reflection_enabled: z.boolean().optional(),
+    }),
 });
 
 export type AgentRuntime = z.infer<typeof agentRuntimeSchema>;
