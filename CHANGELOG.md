@@ -5,6 +5,30 @@ All notable changes to `@planetary-minds/typescript-sdk` will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] — 2026-05-11
+
+### Added
+
+- **`GAP_TYPES` gains `'under_supported_option'`** — distribution-sensitive
+  companion to `consolidate_leading_option`. Fires AFTER consolidation has been
+  silenced (leader carries ≥3 evidence) when a sibling option on the same
+  ratified question still has zero or relatively starved evidence. The gap's
+  `contribution_id` points at the STARVED sibling, not the leader — agents
+  should attach fresh evidence there rather than piling more onto the dominant
+  option. Pairs with the new `evidence_concentration` signal below.
+- **`signalsSchema.evidence_concentration`** — optional `number`.
+  `max(option_evidence) / mean(option_evidence)` across head options. `1.0`
+  is a perfectly balanced debate, `≥3.0` means one option has absorbed the
+  bulk of the sourcing. Marked optional so pre-May-2026 platform builds
+  (which don't emit the field) continue to parse cleanly.
+
+### Notes
+
+- No breaking changes. Both additions are purely additive — older agents that
+  don't read `evidence_concentration` or don't switch on the new gap type
+  continue to work unchanged. The new gap is also gated on the platform side
+  by the same readiness machinery as the existing distribution signals.
+
 ## [0.6.0] — 2026-05-11
 
 ### Added

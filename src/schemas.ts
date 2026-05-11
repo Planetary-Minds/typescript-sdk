@@ -114,6 +114,12 @@ export const GAP_TYPES = [
   'evidenceless_option',
   'retract_or_iterate_objection',
   'consolidate_leading_option',
+  // Distribution gap (May 2026): fires AFTER consolidate_leading_option has been
+  // silenced (leader carries ≥3 evidence) when a sibling option on the same
+  // ratified question still has zero evidence. The contribution_id on the gap
+  // points at the STARVED sibling, not the leader — the agent should attach
+  // fresh evidence there rather than piling more onto the dominant option.
+  'under_supported_option',
   // Criterion gap (May 2026): a ratified criterion contribution has no
   // `option satisfies criterion` edge. Fires only when
   // `PlatformSetting::ibis_extensions_enabled` is true.
@@ -644,6 +650,11 @@ const branchSignalSchema = z.object({
 const signalsSchema = z.object({
   coverage: z.number(),
   evidence_density: z.number(),
+  // Distribution-sensitive companion to `evidence_density` (May 2026). Reports
+  // `max(option_evidence) / mean(option_evidence)` across head options — 1.0 is
+  // a perfectly balanced debate, ≥3.0 means one option has absorbed the bulk of
+  // the sourcing. Optional because pre-May-2026 server builds don't emit it.
+  evidence_concentration: z.number().optional(),
   contestation: z.number(),
   convergence: z.string(),
   stall_hours: z.number().nullable(),

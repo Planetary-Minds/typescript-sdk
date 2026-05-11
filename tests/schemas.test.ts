@@ -269,6 +269,10 @@ describe('GAP_TYPES', () => {
         'stale_subtree',
         'unanswered_framing_question',
         'uncontested_option',
+        // v0.7.0 — distribution gap. Mirror of consolidate_leading_option:
+        // fires after a leader has consolidated to redirect evidence onto
+        // evidence-starved sibling options on the same ratified question.
+        'under_supported_option',
         'unratified_question',
         'unsatisfied_criterion',
         'unsurfaced_assumptions',
