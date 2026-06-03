@@ -1182,6 +1182,76 @@ export const synthesisReferenceSchema = z.object({
 });
 export type SynthesisReference = z.infer<typeof synthesisReferenceSchema>;
 
+/* --------------------------------------------------------------------------
+ * v8 synthesis additions — technology_horizon[] + scope_gaps[].
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Domain-general capability classes for the technology/innovation horizon. NOT
+ * challenge-specific: an ignition sensor is `sensing_detection`, a spread model
+ * is `prediction_modelling`, etc., so the same enum serves every challenge.
+ */
+export const TECHNOLOGY_ROLES = [
+  'sensing_detection',
+  'prediction_modelling',
+  'monitoring_verification',
+  'optimisation_decision_support',
+  'early_warning',
+  'data_integration',
+] as const;
+export type TechnologyRole = (typeof TECHNOLOGY_ROLES)[number];
+
+/** Technology maturity. `experimental` items are watch/pilot only. */
+export const TECHNOLOGY_MATURITIES = ['deployed', 'emerging', 'experimental'] as const;
+export type TechnologyMaturity = (typeof TECHNOLOGY_MATURITIES)[number];
+
+/** scope_gaps[] kinds — advisory "the brief didn't ask for X but it matters". */
+export const SCOPE_GAP_KINDS = [
+  'unasked_deliverable',
+  'unasked_question',
+  'data_input_needed',
+] as const;
+export type ScopeGapKind = (typeof SCOPE_GAP_KINDS)[number];
+
+/**
+ * Reproducible-computational-evidence validation axis (v8 Pass 3). Only a run
+ * validated against local observations can back an `evidence_based`
+ * procurement-grade figure; an unvalidated run is `derived`-at-best.
+ */
+export const COMPUTATIONAL_VALIDATION_STATUSES = [
+  'validated_against_local_observations',
+  'unvalidated',
+] as const;
+export type ComputationalValidationStatus =
+  (typeof COMPUTATIONAL_VALIDATION_STATUSES)[number];
+
+/**
+ * Forward-looking technology item. Maturity-labelled and brand-free; quarantined
+ * from the procurement-grade resolutions.
+ */
+export const technologyHorizonSchema = z.object({
+  name: z.string(),
+  role: z.enum(TECHNOLOGY_ROLES),
+  maturity: z.enum(TECHNOLOGY_MATURITIES),
+  grounding: z.enum(EVIDENCE_LABELS),
+  description: z.string(),
+  evidence_id: z.string().nullable().optional(),
+});
+export type TechnologyHorizonItem = z.infer<typeof technologyHorizonSchema>;
+
+/**
+ * An output/question the brief did not ask for but the record shows matters.
+ * Advisory only — does not gate maturation.
+ */
+export const scopeGapSchema = z.object({
+  kind: z.enum(SCOPE_GAP_KINDS),
+  title: z.string(),
+  rationale: z.string(),
+  load_bearing: z.boolean().optional().default(false),
+  supporting_claim_ids: z.array(z.string()).optional().default([]),
+});
+export type ScopeGap = z.infer<typeof scopeGapSchema>;
+
 /**
  * Subset of the synthesis cache that agents (peer reviewers especially) want
  * to type-check against. Everything is `.optional()` because older synthesis
@@ -1283,6 +1353,10 @@ export const synthesisAdditionsSchema = z
       .optional(),
     figure_citations: z.array(figureCitationSchema).optional(),
     supplier_needs: z.array(supplierNeedSchema).optional(),
+    // v8 — forward-looking horizon + advisory scope gaps. Optional so older
+    // synthesis payloads (schema_version < 8) round-trip unchanged.
+    technology_horizon: z.array(technologyHorizonSchema).optional(),
+    scope_gaps: z.array(scopeGapSchema).optional(),
     references: z.array(synthesisReferenceSchema).optional(),
   })
   .passthrough();

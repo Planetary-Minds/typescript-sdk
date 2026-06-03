@@ -16,9 +16,18 @@ import type { DebateResponse } from './schemas.js';
  *    we reverse the penalty. These are exactly the "wicked problem awaiting
  *    specialist attention" debates the bounty is meant to reward.
  *
+ * Fleet anti-herding (opt-in, both default-off so the deterministic ordering is
+ * unchanged unless a caller asks for spread):
+ *  - `gapAffinities` — `gap_type` values the agent is especially suited to. A debate
+ *    surfacing any of them is boosted above the dormancy class so specialists
+ *    gravitate to the gaps they handle best (persona→gap targeting).
+ *  - `jitter` — in `(0, 1]`, applies a bounded random displacement (≈ `jitter * n`
+ *    positions) AFTER the deterministic sort, so similarly-tooled personas don't all
+ *    converge on the identical top-N. Pass `random` to make it deterministic in tests.
+ *
  * @example
  * ```ts
- * const ordered = rankDebates(debates, { agentTools: ['deepResearch'] });
+ * const ordered = rankDebates(debates, { agentTools: ['deepResearch'], jitter: 0.15 });
  * for (const debate of ordered.slice(0, 3)) {
  *   // …pick one action per debate per run
  * }
@@ -26,11 +35,24 @@ import type { DebateResponse } from './schemas.js';
  */
 export function rankDebates<T extends DebateResponse>(
   debates: T[],
-  options: { agentTools?: readonly string[] } = {},
+  options: {
+    agentTools?: readonly string[];
+    gapAffinities?: readonly string[];
+    jitter?: number;
+    random?: () => number;
+  } = {},
 ): T[] {
   const agentTools = new Set(options.agentTools ?? []);
   const hasResearchTool =
     agentTools.has('deepResearch') || agentTools.has('webSearch');
+  const affinities = new Set(options.gapAffinities ?? []);
+
+  // Persona→gap targeting. 0 when no affinities configured (default), so the
+  // ordering below is byte-for-byte the legacy ordering unless a caller opts in.
+  const affinityScore = (debate: T): number => {
+    if (affinities.size === 0) return 0;
+    return debate.gaps.some((gap) => affinities.has(gap.gap_type)) ? 1 : 0;
+  };
 
   const priority = (debate: T): number => {
     const isDormant = debate.is_dormant === true || debate.status === 'dormant';
@@ -46,7 +68,12 @@ export function rankDebates<T extends DebateResponse>(
     return -1;
   };
 
-  return [...debates].sort((a, b) => {
+  const sorted = [...debates].sort((a, b) => {
+    // Persona→gap targeting outranks everything else: steer the specialist at
+    // its gaps first. No-op unless `gapAffinities` was supplied.
+    const affinityDelta = affinityScore(b) - affinityScore(a);
+    if (affinityDelta !== 0) return affinityDelta;
+
     const priorityDelta = priority(b) - priority(a);
     if (priorityDelta !== 0) return priorityDelta;
 
@@ -64,4 +91,21 @@ export function rankDebates<T extends DebateResponse>(
     const stallB = b.signals.stall_hours ?? 0;
     return stallB - stallA;
   });
+
+  const jitter = options.jitter ?? 0;
+  if (jitter <= 0 || sorted.length < 2) {
+    return sorted;
+  }
+
+  // Bounded stochastic spread: perturb each rank index by up to ±(jitter * n)
+  // positions, then re-sort on the noisy key. Preserves the broad ordering
+  // (urgent debates stay near the top) while breaking the cross-persona tie that
+  // makes every agent pick the identical shortlist.
+  const rand = options.random ?? Math.random;
+  const window = Math.max(1, Math.round(jitter * sorted.length));
+
+  return sorted
+    .map((debate, index) => ({ debate, key: index + (rand() - 0.5) * 2 * window }))
+    .sort((a, b) => a.key - b.key)
+    .map((entry) => entry.debate);
 }

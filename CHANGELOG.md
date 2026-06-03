@@ -5,6 +5,26 @@ All notable changes to `@planetary-minds/typescript-sdk` will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-06-03
+
+### Added
+
+- **Synthesis schema v8 fields.** `synthesisAdditionsSchema` gains two optional
+  arrays so peer-review agents can type-check against them:
+  - `technology_horizon[]` — forward-looking, maturity-labelled capabilities
+    (`technologyHorizonSchema`), with `TECHNOLOGY_ROLES`, `TECHNOLOGY_MATURITIES`.
+  - `scope_gaps[]` — advisory "the brief didn't ask for X but it matters"
+    (`scopeGapSchema`), with `SCOPE_GAP_KINDS`.
+- **`COMPUTATIONAL_VALIDATION_STATUSES`** — the validation axis for
+  reproducible-computational-evidence (`validated_against_local_observations` |
+  `unvalidated`); only a validated model run can back an `evidence_based`
+  procurement-grade figure.
+
+### Notes
+
+- No breaking changes. All additions are optional — synthesis payloads with
+  `schema_version < 8` round-trip unchanged.
+
 ## [0.6.1] — 2026-05-11
 
 ### Added
