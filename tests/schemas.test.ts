@@ -21,7 +21,7 @@ describe('contributionWriteSchema', () => {
       edge_type: 'supports',
       title: 'Sediment clauses exist but are unenforced',
       body: 'Existing MRC procedures reference flow but not sediment flux, which creates an audit gap.',
-      confidence: 70,
+      confidence: 'high',
     });
     expect(parsed.success).toBe(true);
   });

@@ -12,7 +12,21 @@ import { z } from 'zod';
  * 422'd anyway.
  */
 
+/**
+ * Typed IBIS node kinds. Note: `comment` is side-chatter — it is filtered out of
+ * the debate graph and contributes to NONE of the maturation signals (coverage,
+ * evidence density, contestation, convergence) and never reaches synthesis. Use a
+ * `claim`/`evidence` node, not a comment, for anything you want to move a signal.
+ */
 export const NODE_TYPES = ['question', 'option', 'claim', 'evidence', 'comment', 'criterion', 'assumption', 'synthesis_rollup'] as const;
+
+/**
+ * Author confidence is a coarse bucket, not a 0–100 number: fine-grained
+ * self-reported confidence from an LLM is poorly calibrated and systematically
+ * overconfident, so only the bucket carries real signal. (It currently feeds no
+ * maturation signal.)
+ */
+export const CONFIDENCE_LEVELS = ['low', 'medium', 'high'] as const;
 export const EDGE_TYPES = [
   'answers',
   'raises',
@@ -111,6 +125,11 @@ export const GAP_TYPES = [
   'unratified_question',
   'single_option_question',
   'uncontested_option',
+  // HARD gap: the whole debate has options but no objection on any option/claim
+  // — an uncontested monologue. Blocks maturation (gated by the platform's
+  // `readiness_require_contested` setting). Distinct from the per-option
+  // `uncontested_option` nudge above.
+  'uncontested_debate',
   'evidenceless_option',
   'retract_or_iterate_objection',
   'consolidate_leading_option',
@@ -341,7 +360,7 @@ export const contributionWriteSchema = z
     // refinement below so the model-facing error is specific ("comment body
     // exceeds 280") instead of a generic 6000.
     body: z.string().min(BODY_MIN).max(BODY_MAX_GLOBAL),
-    confidence: z.number().int().min(0).max(100).optional(),
+    confidence: z.enum(CONFIDENCE_LEVELS).optional(),
     // Our API enforces `url:http,https` + `max:2048`. `z.string().url()` alone
     // accepts `ftp://`, `mailto:`, etc. which the backend would reject with a
     // 422.
@@ -570,12 +589,15 @@ const contributionReadSchema = z.object({
   author_agent_id: z.string().nullable(),
   title: z.string().nullable().optional(),
   body: z.string(),
-  confidence: z.number().nullable().optional(),
+  confidence: z.enum(CONFIDENCE_LEVELS).nullable().optional(),
   evidence_url: z.string().nullable().optional(),
   evidence_excerpt: z.string().nullable().optional(),
   evidence_accessed_at: z.string().nullable().optional(),
   source_attribution: z.string().nullable().optional(),
   moderation_status: z.string(),
+  // Author-retracted ("withdrawn"). A resolved objection no longer gates
+  // maturation; skip rebutting it.
+  resolved_at: z.string().nullable().optional(),
   replaces_contribution_id: z.string().nullable().optional(),
   research_artifact_id: z.string().nullable().optional(),
   challenge_question_id: z.string().nullable().optional(),
