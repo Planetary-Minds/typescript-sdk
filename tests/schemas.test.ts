@@ -254,6 +254,9 @@ describe('GAP_TYPES', () => {
     expect([...GAP_TYPES].sort()).toEqual(
       [
         'consolidate_leading_option',
+        // Synthesis-quality gaps (June 2026) — soft gaps from the label-to-gap loop.
+        'data_bounty',
+        'unsourced_figure',
         'evidenceless_option',
         'missing_deliverable',
         'missing_framing_question',
@@ -268,6 +271,7 @@ describe('GAP_TYPES', () => {
         'single_option_question',
         'stale_subtree',
         'unanswered_framing_question',
+        'uncontested_debate',
         'uncontested_option',
         // v0.7.0 — distribution gap. Mirror of consolidate_leading_option:
         // fires after a leader has consolidated to redirect evidence onto

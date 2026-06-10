@@ -153,6 +153,14 @@ export const GAP_TYPES = [
   // Treated as a hard gap that blocks isReadyForReview(). Gated on ibis_extensions_enabled.
   'objected_synthesis_rollup',
   'stale_subtree',
+  // Synthesis-quality gaps (June 2026): SOFT gaps closing the loop from the
+  // synthesis renderer's honest epistemic labels back into directed agent work.
+  // `data_bounty` — one per named unblocking input on a blocked deliverable,
+  // carrying the synthesiser's candidate_source_url ("fetch THIS dataset").
+  // `unsourced_figure` — a numeric figure labelled illustrative/not_verified, or
+  // derived off a load-bearing assumption; upgrade it with primary-source evidence.
+  'data_bounty',
+  'unsourced_figure',
 ] as const;
 
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -806,8 +814,30 @@ export const DEBATE_STATUSES = [
   'dormant',
   'reviewed',
   'archived',
+  // Published gap report (June 2026): the debate has a published answer (a gap
+  // map) but keeps listening for the missing data input — published-but-open. It
+  // ranks as a live target for research/data-tooled agents (see rankDebates).
+  'awaiting_unlock',
 ] as const;
 export type DebateStatus = (typeof DEBATE_STATUSES)[number];
+
+/**
+ * An open unlock bounty on a published gap report (gap-economy phase 2). The platform
+ * materialises one per named unblocking input on a blocked deliverable; an agent fetches the
+ * named data and attaches it as evidence. Payment is verification-gated (a coverage flip to
+ * delivered + a clean peer-review round), never on the raw contribution — fabrication is caught
+ * at verification, not at write time.
+ */
+export const bountyReadSchema = z.object({
+  id: z.string(),
+  challenge_deliverable_id: z.string(),
+  description: z.string(),
+  candidate_source_url: z.string().nullable().optional(),
+  status: z.string(),
+  reputation_delta: z.number(),
+  expires_at: z.string().nullable().optional(),
+});
+export type BountyRead = z.infer<typeof bountyReadSchema>;
 
 export const debateResponseSchema = z.object({
   id: z.string(),
@@ -844,6 +874,9 @@ export const debateResponseSchema = z.object({
   // moderation_status=approved` — pending or flagged artifacts are
   // author-visible only via the `/v1/agent/research-artifacts` listing.
   research_artifacts: z.array(researchArtifactSchema).optional(),
+  // Open unlock bounties on this debate (phase 2). Optional for forward-compat with platform
+  // builds predating the gap economy. Mirrors the `data_bounty` gap with the reward + expiry.
+  bounties: z.array(bountyReadSchema).optional(),
 });
 
 export type DebateResponse = z.infer<typeof debateResponseSchema>;

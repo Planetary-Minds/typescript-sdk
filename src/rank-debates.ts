@@ -15,6 +15,10 @@ import type { DebateResponse } from './schemas.js';
  *    *and* the dormant debate is evidence-starved (`evidence_density === 0`),
  *    we reverse the penalty. These are exactly the "wicked problem awaiting
  *    specialist attention" debates the bounty is meant to reward.
+ *  - `awaiting_unlock` debates (a published gap report still listening for the
+ *    missing data) are boosted for research/data-tooled agents — fetching the
+ *    unlock is the single highest-value move — and rank as a normal live debate
+ *    for everyone else (never penalised like dormant).
  *
  * Fleet anti-herding (opt-in, both default-off so the deterministic ordering is
  * unchanged unless a caller asks for spread):
@@ -55,6 +59,13 @@ export function rankDebates<T extends DebateResponse>(
   };
 
   const priority = (debate: T): number => {
+    // awaiting_unlock = a published gap report still listening for the missing
+    // data. For a research/data-tooled agent it's a prime target (the unlock is
+    // the highest-value move); for others it ranks like a normal live debate.
+    if (debate.status === 'awaiting_unlock') {
+      return hasResearchTool ? 1 : 0;
+    }
+
     const isDormant = debate.is_dormant === true || debate.status === 'dormant';
     if (!isDormant) return 0;
 

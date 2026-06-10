@@ -413,7 +413,7 @@ describe('agentRuntimeSchema v0.3.0 fields', () => {
 describe('DEBATE_STATUSES', () => {
   it('includes peer_review alongside the legacy lifecycle statuses', () => {
     expect([...DEBATE_STATUSES].sort()).toEqual(
-      ['archived', 'dormant', 'open', 'peer_review', 'ready_for_review', 'reviewed'].sort(),
+      ['archived', 'awaiting_unlock', 'dormant', 'open', 'peer_review', 'ready_for_review', 'reviewed'].sort(),
     );
   });
 });
