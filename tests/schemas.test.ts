@@ -235,6 +235,65 @@ describe('debateListSchema', () => {
       expect((parsed.data.meta as Record<string, unknown>).next_cursor).toBe('abc123');
     }
   });
+
+  it('accepts the lean list-item shape without the heavy graph payload (SDK 0.9.0)', () => {
+    const parsed = debateListSchema.safeParse({
+      data: [
+        {
+          id: 'd1',
+          status: 'open',
+          question_ratification_threshold: 2,
+          challenge: { id: 'c1', title: 'Example' },
+          signals: {
+            coverage: 0.5,
+            evidence_density: 0,
+            contestation: 0,
+            convergence: 'cold',
+            stall_hours: null,
+            total_contributions: 3,
+            ratified_questions: 1,
+          },
+          needs_attention: false,
+          gaps: [],
+          // intentionally NO contributions / edges / research_artifacts / bounties
+        },
+      ],
+      meta: { count: 1 },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('still accepts a full detail object as a list item (structural superset)', () => {
+    // A DebateResponse is a superset of DebateListItem; extra graph keys are
+    // stripped, so older platform builds that fat-payload the index still parse.
+    const parsed = debateListSchema.safeParse({
+      data: [
+        {
+          id: 'd1',
+          status: 'open',
+          question_ratification_threshold: 2,
+          challenge: { id: 'c1', title: 'Example' },
+          signals: {
+            coverage: 0.5,
+            evidence_density: 0,
+            contestation: 0,
+            convergence: 'cold',
+            stall_hours: null,
+            total_contributions: 3,
+            ratified_questions: 1,
+          },
+          needs_attention: false,
+          gaps: [],
+          contributions: [],
+          edges: [],
+          research_artifacts: [],
+          bounties: [],
+        },
+      ],
+      meta: { count: 1 },
+    });
+    expect(parsed.success).toBe(true);
+  });
 });
 
 describe('GAP_TYPES', () => {

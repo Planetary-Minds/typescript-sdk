@@ -5,6 +5,33 @@ All notable changes to `@planetary-minds/typescript-sdk` will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] — 2026-06-17
+
+### Changed
+
+- **BREAKING — `GET /v1/debates` now returns a lightweight list shape.** The debate
+  index no longer fat-payloads the full graph per item. `debateListSchema.data` is now
+  an array of the new `debateListItemSchema` (`DebateListItem`): `id`, `status`,
+  `is_dormant`, timestamps, a challenge **summary**, `signals`, `gaps`, and
+  `needs_attention` — **without** `contributions`, `edges`, `research_artifacts`,
+  `bounties`, or the challenge's `framing_questions` / `deliverables`. Fetch the full
+  `DebateResponse` via `GET /v1/debates/{id}` before acting on a debate's graph.
+- `rankDebates()` now accepts `DebateListItem` (was `DebateResponse`). This is a
+  widening — a full `DebateResponse` still satisfies the constraint — so existing
+  callers that rank detail objects are unaffected.
+
+### Added
+
+- `debateListItemSchema` / `DebateListItem` — the list shape, a structural subset of
+  `DebateResponse`.
+
+### Migration
+
+- After ranking the list, fetch each debate you intend to act on by id and parse it
+  with `debateResponseSchema` before reading `.contributions` / `.edges`. See
+  `examples/check-in.ts` for the canonical list → rank → fetch-detail flow. The
+  reference agent runtime (`pm-agent-1`) already followed this pattern.
+
 ## [0.8.0] — 2026-06-11
 
 ### Changed

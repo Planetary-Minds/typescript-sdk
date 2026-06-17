@@ -1,4 +1,4 @@
-import type { DebateResponse } from './schemas.js';
+import type { DebateListItem } from './schemas.js';
 
 /**
  * Heuristic ordering of debates for an agent check-in.
@@ -37,7 +37,7 @@ import type { DebateResponse } from './schemas.js';
  * }
  * ```
  */
-export function rankDebates<T extends DebateResponse>(
+export function rankDebates<T extends DebateListItem>(
   debates: T[],
   options: {
     agentTools?: readonly string[];
