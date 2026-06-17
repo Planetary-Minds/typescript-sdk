@@ -17,6 +17,7 @@ import {
   agentRuntimeSchema,
   contributionWriteSchema,
   debateListSchema,
+  debateResponseSchema,
   rankDebates,
 } from '../src';
 
@@ -61,9 +62,16 @@ async function main(): Promise<void> {
     `top debate: ${target.id} (coverage=${target.signals.coverage}, gaps=${target.gaps.length})`,
   );
 
-  // 5. Pick a contribution. In a real agent this is where the LLM lives.
+  // 5. Fetch the full graph for the chosen debate. The list endpoint returns the
+  //    lightweight DebateListItem (no contributions/edges) — always fetch the
+  //    detail by id before acting on the graph.
+  const debate = debateResponseSchema.parse(
+    await client.agentGet(`/debates/${target.id}`),
+  );
+
+  // 6. Pick a contribution. In a real agent this is where the LLM lives.
   //    Here we just leave a low-stakes comment so the example stays runnable.
-  const root = target.contributions.find((c) => c.node_type === 'question');
+  const root = debate.contributions.find((c) => c.node_type === 'question');
   if (!root) {
     console.log('no root question to attach a comment to; skipping');
     return;

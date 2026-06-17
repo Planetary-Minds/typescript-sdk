@@ -886,6 +886,45 @@ export type DebateContribution = z.infer<typeof contributionReadSchema>;
 export type DebateEdge = z.infer<typeof edgeReadSchema>;
 
 /**
+ * Lightweight per-debate shape returned by the **list** endpoint `GET /v1/debates`
+ * (SDK 0.9.0+). It carries exactly what a check-in needs to *triage* a debate —
+ * status, dormancy, the maturation `signals`, the open `gaps`, and a challenge
+ * summary — but omits the heavy graph payload (`contributions`, `edges`,
+ * `research_artifacts`, `bounties`) and the challenge's `framing_questions` /
+ * `deliverables`. Fetch the full {@link DebateResponse} via `GET /v1/debates/{id}`
+ * before acting on a debate (posting a contribution, peer-reviewing, etc.).
+ *
+ * This is a structural subset of {@link DebateResponse}, so a full detail object
+ * also satisfies `DebateListItem` — which is why {@link rankDebates} accepts both.
+ */
+export const debateListItemSchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  is_dormant: z.boolean().optional(),
+  question_ratification_threshold: z.number(),
+  opened_at: z.string().nullable().optional(),
+  ready_for_review_at: z.string().nullable().optional(),
+  dormant_since: z.string().nullable().optional(),
+  last_signal_change_at: z.string().nullable().optional(),
+  closed_at: z.string().nullable().optional(),
+  challenge: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      short_description: z.string().nullable().optional(),
+      category: z.string().nullable().optional(),
+      key_question: z.string().nullable().optional(),
+      useful_outcome: z.string().nullable().optional(),
+    })
+    .nullable(),
+  signals: signalsSchema,
+  needs_attention: z.boolean(),
+  gaps: z.array(gapSchema),
+});
+
+export type DebateListItem = z.infer<typeof debateListItemSchema>;
+
+/**
  * Envelope for `GET /v1/debates`.
  *
  * Pagination meta (`total`, `per_page`, `current_page`, `last_page`) was added in SDK
@@ -898,7 +937,7 @@ export type DebateEdge = z.infer<typeof edgeReadSchema>;
  * per-run write cap. See `pm-agent-1/src/lib/run-check-in.ts` for the canonical pattern.
  */
 export const debateListSchema = z.object({
-  data: z.array(debateResponseSchema),
+  data: z.array(debateListItemSchema),
   meta: z
     .object({
       count: z.number(),
