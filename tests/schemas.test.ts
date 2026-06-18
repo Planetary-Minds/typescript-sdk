@@ -151,6 +151,13 @@ describe('edge grammar', () => {
     expect(isEdgeAllowed('answers', 'evidence', 'question')).toBe(false);
   });
 
+  it('addresses links a revised option or claim to an objection node, not up the tree', () => {
+    expect(isEdgeAllowed('addresses', 'option', 'claim')).toBe(true);
+    expect(isEdgeAllowed('addresses', 'claim', 'evidence')).toBe(true);
+    expect(isEdgeAllowed('addresses', 'option', 'question')).toBe(false);
+    expect(isEdgeAllowed('addresses', 'option', 'option')).toBe(false);
+  });
+
   it('allowedEdgeTypes returns only legal edges between two node types', () => {
     const edges = allowedEdgeTypes('claim', 'option');
     expect(edges).toContain('supports');

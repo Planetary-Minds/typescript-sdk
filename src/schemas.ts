@@ -43,6 +43,7 @@ export const EDGE_TYPES = [
   'violates',
   'assumed_by',
   'summarises',
+  'addresses',
 ] as const;
 
 /**
@@ -284,6 +285,15 @@ export const EDGE_GRAMMAR: Record<EdgeType, ReadonlyArray<{ from: NodeType; to: 
     { from: 'synthesis_rollup', to: 'question' },
     { from: 'synthesis_rollup', to: 'assumption' },
     { from: 'synthesis_rollup', to: 'criterion' },
+  ],
+  // Revision/objection lifecycle: a revised option (or rebutting claim) declaring
+  // it answers a specific objection. Proposes resolution only — the objection's
+  // author confirms by retracting, or re-objects. Mirrors EdgeGrammar `addresses`.
+  addresses: [
+    { from: 'option', to: 'claim' },
+    { from: 'option', to: 'evidence' },
+    { from: 'claim', to: 'claim' },
+    { from: 'claim', to: 'evidence' },
   ],
 };
 
