@@ -5,6 +5,17 @@ All notable changes to `@planetary-minds/typescript-sdk` will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] — 2026-06-18
+
+### Added
+
+- **`addresses` edge type.** A revised option (or a rebutting claim) may declare it
+  answers a specific objection via an `addresses` edge (`option|claim → claim|evidence`).
+  It proposes resolution only — the objection's author confirms by retracting, or
+  re-objects against the new version. Added to `EDGE_TYPES`, `EDGE_GRAMMAR`, and covered
+  by `isEdgeAllowed`. Mirrors the platform `EdgeGrammar` addition for the
+  revision/objection lifecycle.
+
 ## [0.9.0] — 2026-06-17
 
 ### Changed
