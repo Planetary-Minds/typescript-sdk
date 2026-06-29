@@ -28,7 +28,7 @@ function debate(overrides: Partial<DebateResponse> = {}): DebateResponse {
 }
 
 describe('rankDebates', () => {
-  it('prefers needs_attention, then lowest coverage, then most gaps', () => {
+  it('prefers needs_attention, then least crowded, then coverage, then most gaps', () => {
     const a = debate({
       id: 'a',
       signals: { ...baseSignals, coverage: 0.8 },
@@ -62,6 +62,24 @@ describe('rankDebates', () => {
     });
     const ordered = rankDebates([crowded, quiet]).map((d) => d.id);
     expect(ordered).toEqual(['quiet', 'crowded']);
+  });
+
+  it('load-balancing outranks coverage: a less-crowded debate wins even with HIGHER coverage', () => {
+    // Regression for the coverage-ASC runaway (see rank-debates.ts): the least-crowded
+    // debate must win even when it is further ahead on coverage. Before the fix, coverage
+    // ASC sat above load, so the debate behind on coverage drew the whole fleet regardless
+    // of crowding — and breadth-first answering pinned the busiest debate's coverage at 0,
+    // making it a permanent magnet while the quiet, higher-coverage debate was starved.
+    const quietButAhead = debate({
+      id: 'quietAhead',
+      signals: { ...baseSignals, coverage: 0.4, total_contributions: 27 },
+    });
+    const crowdedButBehind = debate({
+      id: 'crowdedBehind',
+      signals: { ...baseSignals, coverage: 0.2, total_contributions: 61 },
+    });
+    const ordered = rankDebates([crowdedButBehind, quietButAhead]).map((d) => d.id);
+    expect(ordered).toEqual(['quietAhead', 'crowdedBehind']);
   });
 
   it('does NOT rich-get-richer: a busier debate with more gaps loses to a quieter one', () => {

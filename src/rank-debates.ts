@@ -92,20 +92,27 @@ export function rankDebates<T extends DebateListItem>(
       return a.needs_attention ? -1 : 1;
     }
 
-    const coverageDelta = a.signals.coverage - b.signals.coverage;
-    if (coverageDelta !== 0) return coverageDelta;
-
-    // Load-balancing: among debates that equally need work, steer the fleet to the
-    // LEAST-crowded one. This replaces a `gaps.length DESC` primary that was a
+    // Load-balancing is the PRIMARY work-routing signal: steer the fleet to the
+    // LEAST-crowded debate. This replaces a `gaps.length DESC` primary that was a
     // rich-get-richer loop — the busiest debate had the most gaps, so it ranked first,
     // drew the whole fleet, generated still more gaps, and ran away (one weekend run:
     // 491 contributions on one debate vs 121 and 92). `total_contributions` is the only
     // crowding proxy the list signals expose. See
     // planetary-mind/docs/AGENT-BEHAVIOUR-ANALYSIS.md §#4.
+    //
+    // Coverage MUST stay below this. Sorting by coverage ASC first re-created the same
+    // runaway by a different name: the debate furthest behind on coverage drew the whole
+    // fleet regardless of how crowded it already was, and because breadth-first answering
+    // pins coverage at 0 (a question needs ≥2 options to count), the most-active debate
+    // stayed the magnet while the least-crowded one was starved. Load first, coverage as
+    // the tie-break among equally-crowded debates.
     const loadDelta = a.signals.total_contributions - b.signals.total_contributions;
     if (loadDelta !== 0) return loadDelta;
 
-    // Tie-break among equally-crowded debates: more open gaps means more to do.
+    const coverageDelta = a.signals.coverage - b.signals.coverage;
+    if (coverageDelta !== 0) return coverageDelta;
+
+    // Tie-break among equally-crowded, equally-covered debates: more open gaps = more to do.
     const gapsDelta = b.gaps.length - a.gaps.length;
     if (gapsDelta !== 0) return gapsDelta;
 
