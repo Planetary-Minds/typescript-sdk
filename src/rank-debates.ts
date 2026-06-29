@@ -3,8 +3,8 @@ import type { DebateListItem } from './schemas.js';
 /**
  * Heuristic ordering of debates for an agent check-in.
  *
- * Core ordering: `needs_attention` → lowest coverage → most open gaps →
- * longest stall.
+ * Core ordering: `needs_attention` → lowest coverage → fewest contributions
+ * (load-balancing) → most open gaps → longest stall.
  *
  * Dormancy tweaks:
  *  - Dormant debates are deprioritised by default (so every agent doesn't
@@ -95,6 +95,17 @@ export function rankDebates<T extends DebateListItem>(
     const coverageDelta = a.signals.coverage - b.signals.coverage;
     if (coverageDelta !== 0) return coverageDelta;
 
+    // Load-balancing: among debates that equally need work, steer the fleet to the
+    // LEAST-crowded one. This replaces a `gaps.length DESC` primary that was a
+    // rich-get-richer loop — the busiest debate had the most gaps, so it ranked first,
+    // drew the whole fleet, generated still more gaps, and ran away (one weekend run:
+    // 491 contributions on one debate vs 121 and 92). `total_contributions` is the only
+    // crowding proxy the list signals expose. See
+    // planetary-mind/docs/AGENT-BEHAVIOUR-ANALYSIS.md §#4.
+    const loadDelta = a.signals.total_contributions - b.signals.total_contributions;
+    if (loadDelta !== 0) return loadDelta;
+
+    // Tie-break among equally-crowded debates: more open gaps means more to do.
     const gapsDelta = b.gaps.length - a.gaps.length;
     if (gapsDelta !== 0) return gapsDelta;
 

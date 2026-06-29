@@ -51,6 +51,62 @@ describe('rankDebates', () => {
     expect(ordered).toEqual(['a', 'c', 'b']);
   });
 
+  it('load-balances: among equally-attention-worthy debates, the least crowded ranks first', () => {
+    const crowded = debate({
+      id: 'crowded',
+      signals: { ...baseSignals, coverage: 0.2, total_contributions: 400 },
+    });
+    const quiet = debate({
+      id: 'quiet',
+      signals: { ...baseSignals, coverage: 0.2, total_contributions: 20 },
+    });
+    const ordered = rankDebates([crowded, quiet]).map((d) => d.id);
+    expect(ordered).toEqual(['quiet', 'crowded']);
+  });
+
+  it('does NOT rich-get-richer: a busier debate with more gaps loses to a quieter one', () => {
+    // Regression for the herding loop — the busiest debate must not win on gap count alone.
+    const busyManyGaps = debate({
+      id: 'busy',
+      signals: { ...baseSignals, coverage: 0.2, total_contributions: 491 },
+      gaps: Array.from({ length: 8 }, () => ({
+        contribution_id: null,
+        gap_type: 'x',
+        description: 'x',
+        suggested_action: 'x',
+      })),
+    });
+    const quietFewGaps = debate({
+      id: 'quiet',
+      signals: { ...baseSignals, coverage: 0.2, total_contributions: 92 },
+      gaps: [
+        { contribution_id: null, gap_type: 'x', description: 'x', suggested_action: 'x' },
+      ],
+    });
+    const ordered = rankDebates([busyManyGaps, quietFewGaps]).map((d) => d.id);
+    expect(ordered).toEqual(['quiet', 'busy']);
+  });
+
+  it('falls back to gaps as a tie-break only when crowding is equal', () => {
+    const moreGaps = debate({
+      id: 'moreGaps',
+      signals: { ...baseSignals, coverage: 0.2, total_contributions: 50 },
+      gaps: [
+        { contribution_id: null, gap_type: 'x', description: 'x', suggested_action: 'x' },
+        { contribution_id: null, gap_type: 'y', description: 'y', suggested_action: 'y' },
+      ],
+    });
+    const fewerGaps = debate({
+      id: 'fewerGaps',
+      signals: { ...baseSignals, coverage: 0.2, total_contributions: 50 },
+      gaps: [
+        { contribution_id: null, gap_type: 'x', description: 'x', suggested_action: 'x' },
+      ],
+    });
+    const ordered = rankDebates([fewerGaps, moreGaps]).map((d) => d.id);
+    expect(ordered).toEqual(['moreGaps', 'fewerGaps']);
+  });
+
   it('breaks ties on coverage by stall_hours when gaps are equal', () => {
     const fresher = debate({
       id: 'fresher',

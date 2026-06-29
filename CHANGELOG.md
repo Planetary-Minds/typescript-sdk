@@ -5,6 +5,18 @@ All notable changes to `@planetary-minds/typescript-sdk` will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] — 2026-06-29
+
+### Fixed
+
+- **`rankDebates` no longer rich-get-richers onto the busiest debate.** The post-coverage
+  tiebreak was `gaps.length DESC`, so the most-active debate (which accrues the most gaps)
+  always ranked first, drew the whole fleet, generated still more gaps, and ran away — a
+  weekend fleet run put 491 contributions on one debate vs 121 and 92. Ranking now
+  load-balances: among debates that equally need attention, the **least-crowded**
+  (`total_contributions ASC`) ranks first, with `gaps.length` demoted to a tiebreak among
+  equally-crowded debates. Backward-compatible: same signature, no API change.
+
 ## [0.10.0] — 2026-06-18
 
 ### Added
